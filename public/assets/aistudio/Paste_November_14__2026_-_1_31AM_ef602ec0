@@ -1,0 +1,974 @@
+# DualCharge — Stage 5.4 Product Experience Upgrade
+## Multi-dimensional Insights, Couple Care Loop, Weekly Recharge, Care History & Premium Experience
+
+Continue developing the EXISTING DualCharge React + TypeScript Web App.
+
+This is a major product experience upgrade to the current project, NOT a new project.
+
+The current Stage 5.3 Gemini integration has been completed. Preserve it and improve the existing architecture without rebuilding the application.
+
+---
+
+# PART 0 — MANDATORY PROJECT AUDIT BEFORE CODING
+
+Before changing any code, inspect the existing project and identify:
+
+1. Current application architecture and routing.
+2. Existing Normal User Mode and Presentation Demo Mode separation.
+3. Current canonical 60-day demo dataset and analytics.
+4. Existing Gemini integration and prompt builder.
+5. Existing AI Care recommendation and feedback implementation.
+6. Existing saved suggestion implementation, if any.
+7. Existing daily status confirmation and partner update logic.
+8. Current Notifications and Profile pages.
+9. Existing localStorage keys and state management.
+10. Existing Free / Premium UI and membership state, if any.
+11. Existing translations for English, Simplified Chinese, and Traditional Chinese.
+
+Produce a concise internal implementation plan, then proceed with the implementation.
+
+Do not stop after the audit.
+
+## Critical preservation requirements
+
+- Do not rebuild the app.
+- Do not replace the existing UI with a generic template.
+- Do not remove or simplify existing working features.
+- Do not change the existing Welcome and Onboarding flows.
+- Do not merge Normal User Mode and Presentation Demo Mode.
+- Do not modify the completed Stage 5.3 Gemini integration unnecessarily.
+- Do not change existing canonical 60-day Energy Index values.
+- Do not change the existing Energy Index formula or Stage 5.2 forecasting logic in this stage.
+- Do not remove existing dual-phone desktop presentation.
+- Preserve independent navigation for Alex and Jamie.
+- Preserve all existing language support and visual styling.
+
+Reuse existing components and data structures wherever possible.
+
+If a requested feature already exists, improve or verify it instead of creating a duplicate.
+
+---
+
+# PART 1 — MULTI-DIMENSIONAL HEALTH DATA & AI INSIGHTS
+
+## 1.1 Expand the optional health data schema
+
+Extend the existing daily health data model with the following optional fields:
+
+### Sleep
+- sleep_hours
+- sleep_quality_1_to_5
+- sleep_stage_deep_minutes
+- sleep_stage_rem_minutes
+- sleep_stage_light_minutes
+- sleep_stage_awake_minutes
+
+### Heart Rate
+- resting_heart_rate_bpm
+
+### HRV
+- hrv_value_ms
+- hrv_metric_type: SDNN or RMSSD
+
+### Activity
+- steps
+- activity_minutes
+- activity_intensity
+
+### Self-reported Energy
+- self_reported_energy_1_to_5
+
+### Optional Menstrual Cycle
+- period_start_date
+- period_end_date
+- recorded_cycle_day
+- recorded_cycle_phase
+- is_estimated
+- explicit_cycle_tracking_consent
+
+All new fields must support null or unavailable values.
+
+Do not use zero to represent missing data.
+
+Each measurement should preserve its source, measurement date, and simulated/real status.
+
+Do not assume all devices provide every metric.
+
+## 1.2 Preserve the existing Energy Index
+
+The current Stage 3 Energy Index is an explainable product-demo indicator calculated using:
+
+- Sleep duration.
+- Sleep quality.
+- Self-reported energy.
+
+Preserve its existing formula and all existing historical results.
+
+Activity remains contextual information in the existing Energy Index calculation.
+
+Do NOT silently introduce new RHR, HRV, steps, or menstrual-cycle weights into the existing formula.
+
+Do not recalculate the original 60-day Energy Index values.
+
+Instead, introduce a separate Multi-dimensional Recovery & Activity Insights layer.
+
+The future possibility of a new validated composite Energy Score can be documented, but must not replace the current implementation in this stage.
+
+## 1.3 Preserve existing demo analytics
+
+The existing Presentation Demo must continue to show:
+
+- Alex: relatively stable overall energy patterns.
+- Jamie: a recurring Thursday low-energy pattern.
+- Jamie's intended reference context:
+  - Overall average Energy Index: approximately 67.6.
+  - Thursday average Energy Index: approximately 40.3.
+  - Thursday observations: 9.
+  - Average sleep duration on the preceding day: approximately 5.7 hours.
+
+Recalculate these values from the current canonical dataset before making changes.
+
+If the actual canonical dataset differs from these reference values, report the discrepancy clearly.
+
+Do not modify source records or fabricate data to force the results to match.
+
+Preserve the original date range and all existing Energy Index values.
+
+## 1.4 Extend the Presentation Demo dataset
+
+Add deterministic simulated values for:
+
+- Resting heart rate.
+- HRV.
+- HRV measurement type.
+- Sleep stages.
+- Steps.
+- Activity intensity.
+
+Requirements:
+
+- Exactly 60 daily records per fictional partner.
+- Use the existing canonical records and dates.
+- New values must be deterministic and must not randomly change on every render.
+- Mark all new measurements as simulated.
+- Keep synthetic values plausible and internally consistent.
+- Preserve missing-value support.
+- Do not imply that the values are real measurements.
+
+Use different but plausible personal baselines for Alex and Jamie.
+
+Do not directly compare Alex's RHR or HRV with Jamie's.
+
+## 1.5 Multi-dimensional AI Insights page
+
+Extend the existing Insights page with the following sections:
+
+A. Today's Energy Overview
+- Current Energy Index.
+- Sleep summary.
+- Self-reported energy.
+- Short explanation of today's available data.
+
+B. 60-Day Energy Trends
+- Preserve the existing Energy Index chart.
+- Preserve existing weekday analysis.
+- Preserve the existing seven-day estimates.
+- Keep sample counts and confidence labels.
+
+C. Sleep Patterns
+- Sleep duration trend.
+- Sleep quality trend.
+- Sleep stage distribution where available.
+
+D. HRV Trends
+- HRV historical chart.
+- Personal baseline comparison.
+- Clearly display SDNN or RMSSD.
+- Do not mix the two measurement types.
+
+E. Resting Heart Rate Trends
+- Historical trend.
+- Personal baseline.
+- Deviations from the individual's own normal range.
+
+F. Activity Patterns
+- Steps.
+- Activity minutes.
+- Activity intensity.
+- Weekly patterns.
+
+G. Recurring Energy Patterns
+- Preserve the existing Jamie Thursday pattern.
+- Show supporting sample count.
+- Show prior-day sleep as contextual evidence.
+- Do not claim sleep caused the lower energy.
+
+H. Next 7 Days Energy Estimates
+- Preserve the existing Stage 5.2 forecasting logic.
+- Clearly label results as pattern-based estimates.
+- Do not present them as medical predictions.
+
+Avoid overcrowding the mobile UI. Use compact cards, collapsible sections, and clear chart labels.
+
+## 1.6 Data source and simulated connection interface
+
+Add a Connected Health Data section inside Profile.
+
+In Presentation Demo Mode, show a simulated connection experience:
+
+- Apple Health / Health Connect.
+- Connected status.
+- Permission Granted status.
+- Last Sync timestamp.
+- Available data categories.
+- Sync Now button.
+- Simulated synchronization progress and completion feedback.
+
+Make it clear that this is a simulated connection for demonstration purposes.
+
+Do not call real HealthKit or Health Connect APIs.
+
+In Normal User Mode, do not automatically show fabricated real-device connection status or fabricated health values.
+
+---
+
+# PART 2 — AI CARE & FEEDBACK LEARNING
+
+## 2.1 Improve recommendation context
+
+Update the existing Gemini AI Care context builder to use the new analytics where permitted.
+
+The recommendation context may include:
+
+- Existing Energy Index.
+- Sleep trends.
+- RHR deviations from personal baseline.
+- HRV deviations from personal baseline.
+- HRV measurement type.
+- Activity patterns.
+- Self-reported energy.
+- User's explicitly stated care preferences.
+- Previous feedback.
+- Completed Care History.
+- Weekly Couple Recharge preferences, if shared.
+
+The statistical layer must calculate all metrics.
+
+Gemini should explain the supplied evidence and generate optional care suggestions.
+
+Gemini must not invent statistics, calculate medical conclusions, or diagnose health conditions.
+
+Do not infer emotions from sleep, HRV, or heart rate.
+
+Every recommendation must include:
+
+- Recommendation Title.
+- Description.
+- Why This Fits.
+- Suggested Time.
+- Send Care.
+- Save Suggestion.
+
+Every generated recommendation set should include at least one practical non-purchase action.
+
+Examples:
+
+- Send a Gentle Check-in.
+- Plan a Quiet Evening.
+- Prepare a Warm Drink.
+- Give Your Partner Some Rest Time.
+- Suggest a Relaxing Shared Activity.
+
+Do not make AI Care a shopping recommendation engine.
+
+## 2.2 Separate sender actions and receiver feedback
+
+Implement a clear feedback model.
+
+Sender actions:
+- Sent.
+- Saved.
+- Skipped.
+
+Receiver feedback:
+- Helpful.
+- Not Helpful.
+- Not Suitable for Me.
+
+Do not treat sender preference as equivalent to receiver preference.
+
+Store feedback with:
+
+- Recommendation ID.
+- Sender ID.
+- Recipient ID.
+- Action.
+- Feedback.
+- Timestamp.
+- Recommendation category.
+
+Update the existing Feedback Learning mechanism.
+
+For the current Demo, use local data and deterministic rule-based recommendation ranking.
+
+Repeated positive receiver feedback should gradually increase the priority of similar recommendation categories.
+
+Negative feedback should reduce their priority.
+
+Avoid extreme preference changes from a single response.
+
+The interface should explain that the system learns from user feedback, not that a new AI model is being trained.
+
+## 2.3 Saved Suggestions
+
+Ensure Saved Suggestions are available from Profile.
+
+Add a Saved Suggestions section that allows users to:
+
+- View all saved suggestions.
+- Open suggestion details.
+- See recommendation title, description, and save date.
+- Remove a saved suggestion.
+- Reuse or send a saved suggestion where appropriate.
+
+Saved suggestions must be stored separately for each user.
+
+Do not show one partner's private saved suggestions to the other partner.
+
+Keep existing Save Suggestion actions on AI Care cards.
+
+---
+
+# PART 3 — DAILY STATUS CONFIRMATION & PARTNER UPDATES
+
+This is a critical interaction requirement.
+
+When a user confirms today's status:
+
+1. Save the confirmed daily status immediately.
+2. Update the user's Home page.
+3. Update the partner's shared status summary immediately if the relevant sharing permission is enabled.
+4. Update the partner's latest status timestamp.
+5. Generate a corresponding in-app notification if notification preferences allow it.
+6. Ensure the partner sees the latest permitted information without manually refreshing the page.
+
+For the current dual-phone Demo, use shared application state and existing local persistence to simulate immediate synchronization.
+
+Do not claim that this is real cloud synchronization.
+
+Important privacy rules:
+
+- If Energy Summary sharing is OFF, do not expose the Energy Index to the partner.
+- If Sleep Sharing is OFF, do not expose sleep information.
+- If Recovery Sharing is OFF, do not expose RHR or HRV.
+- If Activity Sharing is OFF, do not expose activity data.
+- If Cycle Sharing is OFF, do not expose cycle information.
+- Never expose raw health data merely because a daily status was confirmed.
+
+If sharing is disabled, the partner may only see a neutral indication such as “Your partner updated their daily check-in” if the user has permitted such a notification.
+
+If sharing is revoked, the partner's interface must stop displaying the restricted information immediately.
+
+Prevent duplicate daily records and duplicate notifications when a user confirms the same date more than once.
+
+---
+
+# PART 4 — WEEKLY COUPLE RECHARGE
+
+Implement Weekly Couple Recharge as a functional feature in the current Demo.
+
+## 4.1 Entry point
+
+Place a Weekly Recharge card on the Home page.
+
+Show:
+
+- This week's completion status.
+- A short explanation.
+- Start Weekly Recharge button.
+- A gentle reminder when the user has not completed it.
+
+Do not repeatedly pressure users to complete it.
+
+## 4.2 Independent weekly questionnaire
+
+Each partner completes their own questionnaire independently.
+
+Question 1:
+
+“What kind of care made you feel most supported this week?”
+
+Options:
+- When my partner checked in on me.
+- When my partner helped me with something.
+- When my partner gave me space to rest.
+- When we spent relaxing time together.
+
+Question 2:
+
+“What would you like more of next week?”
+
+Options:
+- More words of encouragement.
+- More practical support.
+- More quality time together.
+- More personal space and rest.
+
+Allow optional additional comments.
+
+## 4.3 Interaction rules
+
+- Alex and Jamie answer independently.
+- Save each partner's answers separately.
+- Allow skipping.
+- Allow editing submitted answers.
+- Allow users to choose whether to share their answers.
+- Private answers must not appear on the partner's screen.
+- Only shared answers may influence the partner-facing care recommendation context.
+- Use shared answers to update care preferences and Feedback Learning.
+
+Show a completion confirmation.
+
+For the current Demo, use local persistent storage.
+
+Do not create fake submissions in Normal User Mode.
+
+---
+
+# PART 5 — CARE HISTORY: OUR CARE MOMENTS
+
+Implement Care History inside the existing Notifications area.
+
+Add a simple navigation or tab switch:
+
+- Notifications.
+- Our Care Moments.
+
+## 5.1 Record structure
+
+Each completed care record should contain:
+
+- Date and time.
+- Care action title.
+- Sender.
+- Recipient.
+- Completion status.
+- Optional short note.
+- Visibility permission.
+
+## 5.2 History rules
+
+Only Completed care actions enter the official Care History timeline.
+
+Status rules:
+
+- Sent: not included.
+- Received: not included.
+- Completed: included.
+- Cancelled: not included.
+
+When a care action becomes Completed:
+
+- Add it to Care History.
+- Update both partners' shared timeline if visibility is permitted.
+- Prevent duplicate completion records.
+
+Allow users to add or edit an optional note where appropriate.
+
+Do not build a chat application.
+
+Do not expose private notes without permission.
+
+Use a warm, relationship-oriented timeline design.
+
+---
+
+# PART 6 — SMART NOTIFICATIONS & QUIET HOURS
+
+Add Notification Preferences inside Profile.
+
+Implement:
+
+## 6.1 Quiet Hours
+- Custom start time.
+- Custom end time.
+- Enable / Disable.
+
+## 6.2 Notification Frequency
+- Low.
+- Standard.
+- Important Only.
+
+## 6.3 Status Sharing
+- Independent control for sharing today's status updates.
+
+## 6.4 Sensitive Preview
+- Show full permitted details.
+- Show a neutral notification preview without sensitive information.
+
+## 6.5 Notification behavior
+
+- Do not send ordinary notifications during Quiet Hours.
+- Important notifications may follow a separate user-configurable rule.
+- Do not repeatedly notify users who have not checked in.
+- Do not repeatedly remind users to complete Weekly Recharge.
+- Do not expose restricted health data.
+- Respect each recipient's own notification preferences.
+
+For this Web Demo, implement simulated in-app notification behavior only.
+
+Do not claim that operating-system push notifications are implemented.
+
+---
+
+# PART 7 — DATE PLANNING & CALENDAR EXPERIENCE
+
+Add a Date Planning entry inside AI Care.
+
+This is a simulated interactive feature for the current Demo.
+
+## 7.1 Recommendation logic
+
+Use:
+
+- Both partners' permitted energy summaries.
+- Shared activity preferences.
+- Simulated availability.
+- Care preferences.
+
+When both partners have relatively sufficient energy, suggest suitable shared activities.
+
+When one partner may need more rest, suggest lower-intensity activities.
+
+Never assume that a higher Energy Index means someone must want to go out.
+
+## 7.2 Activity categories
+
+- Outdoor Activities.
+- Movie Nights.
+- Restaurant Dates.
+- Weekend Trips.
+- Shared Hobbies.
+- Relaxing Time at Home.
+
+## 7.3 Interaction
+
+Allow users to:
+
+- View suggested activities.
+- View suggested dates and times.
+- Like or skip a suggestion.
+- Invite the partner.
+- Accept or decline the invitation.
+- Mark a plan as agreed.
+
+For the current Demo, use simulated availability and local shared state.
+
+Do not integrate real Google Calendar or Apple Calendar APIs.
+
+---
+
+# PART 8 — COUPLE PREMIUM & SIMULATED PURCHASE
+
+Implement a functional Free / Couple Premium experience.
+
+The pricing is illustrative and must be labelled as a proposed pricing assumption.
+
+Suggested pricing:
+
+Monthly: HK$38 per couple.
+Yearly: HK$288 per couple.
+
+Use the concept:
+
+“One Couple Plan, Two Members.”
+
+## 8.1 Free Plan
+
+Free users retain the essential product experience:
+
+- Daily Energy Overview.
+- Basic AI Insights.
+- Basic AI Care Suggestions.
+- Sending and receiving Care Messages.
+- Basic Feedback Learning.
+- Weekly Couple Recharge.
+- Recent 7-day Care History.
+- Basic Activity Suggestions.
+- Basic Notification Preferences.
+- Essential privacy controls.
+
+Do not lock basic status sharing, user privacy controls, or essential care functions behind Premium.
+
+## 8.2 Couple Premium
+
+Premium includes:
+
+- Advanced AI Insights.
+- More detailed Multi-dimensional Trend Analysis.
+- More personalized AI Care.
+- Advanced Feedback Learning.
+- Full Care History.
+- Couple Widget Preview.
+- Personalized Date Planning.
+- Advanced Couple Experience.
+
+Premium benefits belong to the couple relationship and are shared by both partners.
+
+Do not make real HealthKit or Health Connect integration a current Premium feature.
+
+Do not claim that native widgets or real calendar synchronization are available.
+
+## 8.3 Simulated purchase flow
+
+In Presentation Demo Mode:
+
+Initial state:
+- Alex: Free.
+- Jamie: Free.
+
+Purchase flow:
+
+1. Alex opens Profile & Premium.
+2. Alex views Free and Premium comparison.
+3. Alex selects Upgrade to Premium.
+4. Show a purchase confirmation modal.
+5. Display selected plan, price, billing period, and shared couple benefits.
+6. Alex clicks Confirm Purchase.
+7. Show a simulated successful purchase confirmation.
+8. Update the shared couple membership state to Premium.
+9. Jamie's interface immediately displays Premium Active.
+10. Unlock Premium features for both partners.
+
+Implement:
+
+- Free status.
+- Premium Active status.
+- Shared membership state.
+- Membership start date.
+- Selected plan.
+- Upgrade confirmation.
+- Simulated success feedback.
+- Premium feature unlocking.
+- Reset Demo restores the initial Free state.
+
+No real payment integration.
+
+Do not collect card information or personal payment credentials.
+
+In Normal User Mode, do not claim that a real purchase has occurred. Keep the membership experience clearly marked as a prototype or unavailable until a real payment backend exists.
+
+## 8.4 Membership management rules
+
+Show a short explanation of:
+
+- One subscription covers both partners.
+- Both partners share Premium benefits.
+- Real cancellation, renewal, refund, and account separation rules will be implemented in the production payment system.
+
+Do not build real subscription billing in this stage.
+
+---
+
+# PART 9 — COUPLE WIDGET PREVIEW
+
+Add a Couple Widget Preview section inside the Premium page.
+
+Show several visual widget concepts:
+
+- Today's shared energy summary.
+- A gentle care reminder.
+- A shared daily goal.
+- Anniversary or date countdown.
+
+Allow the user to switch between preview styles.
+
+Clearly label this as “Widget Preview — Coming with the Native App”.
+
+Do not claim that the Web App can install actual phone home-screen widgets.
+
+Do not display sensitive health information in widget previews by default.
+
+---
+
+# PART 10 — PRIVACY, CONSENT & DATA ACCESS
+
+Extend the existing Profile privacy controls.
+
+Each user must independently control:
+
+- Energy Summary Sharing.
+- Sleep Sharing.
+- Heart Rate Sharing.
+- HRV Sharing.
+- Activity Sharing.
+- Menstrual Cycle Sharing.
+
+Default new health-sharing permissions to OFF.
+
+Menstrual Cycle Tracking:
+- Must be explicitly enabled.
+- Must be separately authorized for sharing.
+- Must remain private by default.
+- Must not be automatically enabled based on profile or gender.
+- Must not be included in partner-facing Gemini prompts unless explicitly permitted.
+
+If a user revokes permission:
+
+- Immediately remove restricted details from the partner view.
+- Prevent restricted details from appearing in notifications.
+- Prevent restricted details from entering partner-facing Gemini prompts.
+- Ensure derived summaries do not leak restricted information.
+
+Support clear consent descriptions and easy permission revocation.
+
+Do not store or display unnecessary raw health information.
+
+---
+
+# PART 11 — NAVIGATION & UI INTEGRATION
+
+Preserve the existing five main product areas:
+
+1. Home.
+2. AI Insights.
+3. AI Care.
+4. Notifications.
+5. Profile & Premium.
+
+Keep the existing bottom navigation:
+
+- Home.
+- Insights.
+- Care.
+- Profile.
+
+Notifications remains accessible through the existing header notification icon.
+
+Place new functions inside the appropriate existing pages:
+
+- Weekly Couple Recharge: Home.
+- Care History: Notifications.
+- Saved Suggestions: Profile.
+- Connected Health Data: Profile.
+- Notification Preferences: Profile.
+- Privacy and Sharing: Profile.
+- Premium: Profile.
+- Date Planning: AI Care.
+- Couple Widget Preview: Premium.
+
+Do not create unnecessary new bottom navigation tabs.
+
+## Visual requirements
+
+Preserve the existing DualCharge visual identity:
+
+- Warm, calm, emotionally supportive design.
+- Background gradient from #FDFBFA to #F4EFEA.
+- Primary color #E88C7D.
+- Secondary color #9B93B8.
+- Supporting green #8FA89B.
+- Soft amber and muted green for energy-related indicators.
+- Rounded cards, approximately 20–24px.
+- Soft shadows and subtle glass effects.
+- Clear, readable typography.
+- Gentle transitions and interaction feedback.
+
+Avoid excessive red/green health-status signals.
+
+Prioritize information readability and mobile usability over decoration.
+
+Keep the two-phone desktop presentation:
+
+- Alex on the left.
+- Jamie on the right.
+- Same phone dimensions.
+- Independent navigation.
+- Shared permitted interactions update across both phones.
+
+On narrow screens, display one phone at a time with an Alex / Jamie switcher.
+
+---
+
+# PART 12 — THREE-LANGUAGE SUPPORT
+
+Maintain complete support for:
+
+- English.
+- Simplified Chinese.
+- Traditional Chinese.
+
+Every new feature must support all three languages, including:
+
+- Page titles.
+- Buttons.
+- Form questions.
+- Options.
+- Notifications.
+- Permission descriptions.
+- Health metric labels.
+- Chart labels.
+- Empty states.
+- Error messages.
+- Premium plans.
+- Purchase confirmation.
+- Purchase success.
+- Widget previews.
+- Date planning.
+
+Do not hardcode new English-only text.
+
+Check translation key parity across all three locales.
+
+---
+
+# PART 13 — DATA STORAGE & MODE ISOLATION
+
+Preserve the existing storage architecture and namespaces.
+
+Normal User Mode and Presentation Demo Mode must remain strictly separated.
+
+Presentation Demo:
+- Stores simulated health metrics.
+- Stores Alex and Jamie interactions.
+- Stores Weekly Recharge answers.
+- Stores Care History.
+- Stores shared Premium membership.
+- Stores simulated notification preferences.
+- Stores Date Planning interactions.
+
+Normal User Mode:
+- Stores only actual user-entered or legitimately available data.
+- Does not import Alex/Jamie history.
+- Does not receive fabricated health metrics.
+- Does not receive fabricated Weekly Recharge submissions.
+- Does not inherit Presentation Demo membership.
+
+Use the existing state management and persistence architecture wherever possible.
+
+Do not create duplicate or conflicting localStorage systems.
+
+Reset Demo must restore the canonical Presentation Demo state, including:
+- Original demo health dataset.
+- Original demo analytics.
+- Empty or predefined demo interactions.
+- Free membership status.
+- Default demo notification preferences.
+
+Reset Demo must not delete Normal User Mode data.
+
+Do not implement Firebase or remote cloud sync in this stage.
+
+---
+
+# PART 14 — FUTURE TECHNICAL ARCHITECTURE NOTES
+
+Prepare the code structure for future integrations, but do not implement these integrations now:
+
+- Firebase Authentication.
+- Cloud Firestore.
+- Real-time remote synchronization.
+- Apple HealthKit.
+- Android Health Connect.
+- Native mobile notifications.
+- Native home-screen widgets.
+- Google Calendar / Apple Calendar.
+- Real subscription payment systems.
+
+Document these as future production capabilities.
+
+Do not describe local shared state as Firebase Cloud Sync.
+
+Do not describe simulated health data as real device data.
+
+Do not claim simulated payment as a real purchase.
+
+---
+
+# PART 15 — TESTING & ACCEPTANCE CRITERIA
+
+After implementation, run TypeScript checks and a production build.
+
+Test the following:
+
+### Existing architecture
+1. Welcome and Onboarding still work.
+2. Normal User Mode remains a genuine cold start.
+3. Presentation Demo Mode loads the original 60-day dataset for each partner.
+4. No cross-mode data contamination.
+5. Existing Gemini integration still works.
+6. Existing Energy Index values and forecasts remain unchanged.
+
+### Multi-dimensional insights
+7. Both partners have 60 deterministic simulated records.
+8. New health fields have correct units and source metadata.
+9. SDNN and RMSSD remain distinguishable.
+10. Missing metrics do not break charts.
+11. New metrics use personal baselines.
+12. Existing Jamie Thursday pattern remains intact.
+13. Existing forecast logic remains intact.
+14. All simulated metrics are clearly labelled.
+
+### AI Care and learning
+15. Gemini receives only permitted data.
+16. Sender actions and receiver feedback are stored separately.
+17. Feedback changes subsequent recommendation ranking.
+18. Saved Suggestions can be viewed and removed from Profile.
+19. Saved suggestions remain private to their owner.
+
+### Couple interactions
+20. Daily status confirmation updates the partner view immediately when sharing is enabled.
+21. Revoked sharing permissions remove restricted information.
+22. Weekly Recharge answers are independent.
+23. Weekly Recharge sharing follows consent.
+24. Only Completed actions enter Care History.
+25. Duplicate completion records are prevented.
+
+### Notifications and privacy
+26. Quiet Hours work correctly.
+27. Notification frequency settings affect simulated notifications.
+28. Sensitive Preview hides restricted information.
+29. No restricted health data leaks to the partner.
+
+### Premium and additional experiences
+30. Free / Premium comparison is displayed correctly.
+31. Simulated purchase works.
+32. One partner's simulated purchase unlocks Premium for both.
+33. Reset Demo restores Free membership.
+34. Premium Widget Preview works.
+35. Date Planning invitation and acceptance interactions work.
+
+### Interface and localization
+36. Existing desktop dual-phone layout remains functional.
+37. Narrow-screen single-phone mode remains functional.
+38. All new content works in English, Simplified Chinese, and Traditional Chinese.
+39. No broken buttons or placeholder-only interactions in the requested Demo features.
+
+If browser automation is unavailable, clearly distinguish code-level tests from manual UI tests that still require human verification.
+
+---
+
+# FINAL DELIVERY REPORT
+
+After implementation, provide a structured report:
+
+1. Existing features preserved.
+2. New data fields and analytics added.
+3. AI Insights changes.
+4. AI Care and Feedback Learning changes.
+5. Daily status synchronization behavior.
+6. Weekly Couple Recharge implementation.
+7. Care History implementation.
+8. Notification and privacy implementation.
+9. Premium and simulated purchase implementation.
+10. Widget Preview and Date Planning implementation.
+11. Normal / Presentation mode isolation results.
+12. Three-language translation results.
+13. TypeScript and production build results.
+14. Any known limitations or incomplete items.
+
+Do not report a feature as completed merely because its UI exists.
+
+A feature is complete only when its relevant interaction, state update, persistence, privacy rules, and partner-side behavior have been implemented and tested.
+
+Prioritize product logic, data consistency, privacy, and functional interactions over adding more visual elements.
