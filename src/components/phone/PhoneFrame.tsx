@@ -22,8 +22,9 @@ export function PhoneFrame({
   scope = 'demo',
   subtitleName,
 }: PhoneFrameProps) {
-  const { presentationBundle, normalUser } = useDualCharge();
+  const { presentationBundle, normalUser, shouldHideBottomNav } = useDualCharge();
   const isNormal = scope === 'normal';
+  const hideBottomNav = shouldHideBottomNav(scope, partnerId);
 
   const fallbackName = isNormal
     ? normalUser.nickname || 'You'
@@ -38,7 +39,7 @@ export function PhoneFrame({
         <main className="flex-1 overflow-y-auto phone-scroll px-4 py-4 space-y-4">
           {children}
         </main>
-        <BottomNav partnerId={partnerId} scope={scope} />
+        {!hideBottomNav && <BottomNav partnerId={partnerId} scope={scope} />}
       </div>
     );
   }
@@ -88,8 +89,8 @@ export function PhoneFrame({
             {children}
           </main>
 
-          {/* Fixed Bottom Navigation */}
-          <BottomNav partnerId={partnerId} scope={scope} />
+          {/* Fixed Bottom Navigation (hidden on focused subpages / detail flows) */}
+          {!hideBottomNav && <BottomNav partnerId={partnerId} scope={scope} />}
 
           {/* Subtle Home Indicator Bar */}
           <div className="shrink-0 bg-white/85 backdrop-blur-[10px] pb-1.5 pt-0.5 flex justify-center">

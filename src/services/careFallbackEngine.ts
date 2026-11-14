@@ -981,7 +981,116 @@ export function generateLocalFallbackCare(
           ? 'Low'
           : 'Preference-Based';
 
-  const builtPool: AiCareRecommendation[] = scored.map(({ candidate, localized, meta }) => {
+  const checkInLabel = authorizedCheckIn ? CHECKIN_LABEL_BY_LANG[lang][authorizedCheckIn] : null;
+  const buildNowEvidenceForRec = (matchedPrefs: string[]): { summary: string; details: string[] } => {
+    const details: string[] = [];
+    if (!rec.energyShared) {
+      if (lang === 'en') {
+        details.push(
+          `${rec.name}'s Energy Summary sharing is currently off; only stated care preferences are used.`
+        );
+      } else if (lang === 'zh-CN') {
+        details.push(`${rec.name} 暂未开启精力摘要共享，仅依据已授权偏好提供建议。`);
+      } else {
+        details.push(`${rec.name} 暫未開啟精力摘要分享，僅依已授權偏好提供建議。`);
+      }
+    } else {
+      if (checkInLabel) {
+        if (lang === 'en') {
+          details.push(`Today's confirmed check-in: "${checkInLabel}".`);
+        } else if (lang === 'zh-CN') {
+          details.push(`今日已确认状态签到：「${checkInLabel}」。`);
+        } else {
+          details.push(`今日已確認狀態簽到：「${checkInLabel}」。`);
+        }
+      }
+      if (typeof rec.currentEnergyIndex === 'number') {
+        if (lang === 'en') {
+          details.push(
+            `Latest Energy Index: ${rec.currentEnergyIndex}/100 (recent 7-day average ${recent7Mean}).`
+          );
+        } else if (lang === 'zh-CN') {
+          details.push(`最近一次精力指数：${rec.currentEnergyIndex}/100（近 7 天均值 ${recent7Mean}）。`);
+        } else {
+          details.push(`最近一次精力指數：${rec.currentEnergyIndex}/100（近 7 天均值 ${recent7Mean}）。`);
+        }
+      }
+      if (rec.sleepShared && rec.sleepSummary?.latestSleepHours != null) {
+        if (lang === 'en') {
+          details.push(
+            `Authorized latest sleep: ${rec.sleepSummary.latestSleepHours}h (60-day average ${rec.sleepSummary.overallAvgSleepHours ?? '—'}h).`
+          );
+        } else if (lang === 'zh-CN') {
+          details.push(`已授权最近睡眠时长：${rec.sleepSummary.latestSleepHours} 小时。`);
+        } else {
+          details.push(`已授權最近睡眠時長：${rec.sleepSummary.latestSleepHours} 小時。`);
+        }
+      }
+      if (rec.heartRateShared && rec.rhrSummary?.latestBpm != null && rec.rhrSummary.personalBaselineBpm != null) {
+        const dev = rec.rhrSummary.deviationBpm ?? 0;
+        const sign = dev > 0 ? `+${dev}` : `${dev}`;
+        if (lang === 'en') {
+          details.push(
+            `Resting heart rate vs personal baseline: ${rec.rhrSummary.latestBpm} bpm (${sign} bpm vs ${rec.rhrSummary.personalBaselineBpm} bpm).`
+          );
+        } else if (lang === 'zh-CN') {
+          details.push(
+            `静息心率个人基线参考：${rec.rhrSummary.latestBpm} bpm（${sign} bpm，基线 ${rec.rhrSummary.personalBaselineBpm} bpm）。`
+          );
+        } else {
+          details.push(
+            `靜息心率個人基準參考：${rec.rhrSummary.latestBpm} bpm（${sign} bpm，基準 ${rec.rhrSummary.personalBaselineBpm} bpm）。`
+          );
+        }
+      }
+      if (rec.hrvShared && rec.hrvSummary?.latestMs != null && rec.hrvSummary.personalBaselineMs != null) {
+        const dev = rec.hrvSummary.deviationMs ?? 0;
+        const sign = dev > 0 ? `+${dev}` : `${dev}`;
+        if (lang === 'en') {
+          details.push(
+            `HRV (${rec.hrvSummary.metricType}) vs personal baseline: ${rec.hrvSummary.latestMs} ms (${sign} ms).`
+          );
+        } else if (lang === 'zh-CN') {
+          details.push(`HRV（${rec.hrvSummary.metricType}）个人基线变化：${sign} ms。`);
+        } else {
+          details.push(`HRV（${rec.hrvSummary.metricType}）個人基準變化：${sign} ms。`);
+        }
+      }
+      if (rec.insufficientHistoricalData) {
+        if (lang === 'en') {
+          details.push(
+            `Observed ${rec.recordedDaysCount} record(s) so far; leaning primarily on stated care preferences.`
+          );
+        } else if (lang === 'zh-CN') {
+          details.push(`目前已记录 ${rec.recordedDaysCount} 天个人状态，目前主要依据双方偏好生成。`);
+        } else {
+          details.push(`目前已紀錄 ${rec.recordedDaysCount} 天個人狀態，目前主要依雙方偏好產生。`);
+        }
+      }
+    }
+    if (matchedPrefs.length > 0 || prefSummary) {
+      const prefShown = matchedPrefs.length > 0 ? matchedPrefs.slice(0, 2).join(', ') : prefSummary;
+      if (lang === 'en') {
+        details.push(`Preference match: ${prefShown}.`);
+      } else if (lang === 'zh-CN') {
+        details.push(`偏好匹配：${prefShown}。`);
+      } else {
+        details.push(`偏好匹配：${prefShown}。`);
+      }
+    }
+
+    const summary =
+      details[0] ??
+      (lang === 'en'
+        ? 'Grounded in currently shared preferences and routine comfort.'
+        : lang === 'zh-CN'
+          ? '依据当前已授权偏好与日常舒适节奏整理。'
+          : '依據目前己授權偏好與日常舒適步調整理。');
+
+    return { summary, details };
+  };
+
+  const builtPool: AiCareRecommendation[] = scored.map(({ candidate, localized, meta, matchedPrefs }) => {
     const vars = {
       name: rec.name,
       weekday: patternWeekdayName,
@@ -1022,10 +1131,13 @@ export function generateLocalFallbackCare(
       }
     }
 
+    const nowEvidence = buildNowEvidenceForRec(matchedPrefs);
+
     return {
       id: `${candidate.id}-${variationSeed}`,
       title: localized.title,
       category: candidate.category,
+      timeHorizon: 'now',
       why: fillTemplate(whyTemplate, vars),
       action: fillTemplate(localized.action, vars),
       suggestedTiming: fillTemplate(
@@ -1033,6 +1145,8 @@ export function generateLocalFallbackCare(
         vars
       ),
       personalizationReason: personalizationText,
+      evidenceSummary: nowEvidence.summary,
+      evidenceDetails: nowEvidence.details,
       confidence,
       defaultMessage: localized.defaultMessage,
       actionType: meta.actionType,
@@ -1046,6 +1160,390 @@ export function generateLocalFallbackCare(
 
   // Ensure batch category diversity & cooldown respect
   const recommendations = diversifyRecommendations(builtPool, recentHistory, 3);
+
+  // Build Stage 5.8 Plan Ahead recommendations strictly when authorized multi-week history & forecast allow
+  const canGeneratePlanAhead = Boolean(
+    rec.energyShared &&
+      !rec.insufficientHistoricalData &&
+      rec.canShowFutureForecast !== false &&
+      Array.isArray(rec.upcomingForecast) &&
+      rec.upcomingForecast.length > 0
+  );
+
+  const planAheadRecommendations: AiCareRecommendation[] = [];
+  let planAheadSummary: string | undefined;
+
+  if (canGeneratePlanAhead && rec.upcomingForecast) {
+    const validDays = rec.upcomingForecast.filter(
+      (d) => typeof d.estimatedEnergy === 'number' && d.confidence !== 'Insufficient Data'
+    );
+    if (validDays.length > 0) {
+      const avoidPaid = Boolean(learned?.negativelyRatedAttributes.avoidPaidSuggestions);
+      const lowestDay =
+        highlightedForecast && highlightedForecast.estimatedEnergy !== null
+          ? highlightedForecast
+          : [...validDays].sort(
+              (a, b) => (a.estimatedEnergy ?? 100) - (b.estimatedEnergy ?? 100)
+            )[0];
+      const bestDay =
+        [...validDays]
+          .filter((d) => d.dateISO !== lowestDay.dateISO)
+          .sort((a, b) => (b.estimatedEnergy ?? 0) - (a.estimatedEnergy ?? 0))[0] ?? validDays[0];
+
+      const lowestWeekdayName = weekdays[lowestDay.weekdayIndex];
+      const prepWeekdayIdx = (lowestDay.weekdayIndex + 6) % 7;
+      const prepWeekdayName = weekdays[prepWeekdayIdx];
+      const bestWeekdayName = weekdays[bestDay.weekdayIndex];
+
+      const lowestConfidence: AiCareConfidence =
+        lowestDay.confidence === 'Moderate' ? 'Moderate' : 'Low';
+      const bestConfidence: AiCareConfidence =
+        bestDay.confidence === 'Moderate' ? 'Moderate' : 'Low';
+
+      const sharedSleepNote =
+        rec.sleepShared && rec.sleepSummary?.patternPrevNightAvgSleepHours != null
+          ? lang === 'en'
+            ? `Prior-night sleep before ${lowestWeekdayName}s averaged ${rec.sleepSummary.patternPrevNightAvgSleepHours}h in shared records (observed correlation only).`
+            : lang === 'zh-CN'
+              ? `已授权睡眠摘要显示 ${lowestWeekdayName} 前一晚平均为 ${rec.sleepSummary.patternPrevNightAvgSleepHours} 小时（仅作日常规律参考）。`
+              : `已授權睡眠摘要顯示 ${lowestWeekdayName} 前一晚平均為 ${rec.sleepSummary.patternPrevNightAvgSleepHours} 小時（僅作日常規律參考）。`
+          : null;
+
+      // 1. Recurring Dip / Lower-Energy Window Advance Buffer (Non-purchase)
+      const prepEvidenceDetails: string[] = [];
+      if (hasEnergyPattern && rec.weekdayPattern) {
+        if (lang === 'en') {
+          prepEvidenceDetails.push(
+            `Observed pattern: ${rec.weekdayPattern.observationCount} ${lowestWeekdayName}s across ${rec.weekdayPattern.qualifyingWeeks} weeks averaged ${weekdayMean} vs ${overallMean} overall.`
+          );
+          prepEvidenceDetails.push(
+            `Pattern-based estimate for ${lowestDay.dateISO} (${lowestWeekdayName}): ${lowestDay.estimatedEnergy}/100 (${lowestConfidence} confidence).`
+          );
+        } else if (lang === 'zh-CN') {
+          prepEvidenceDetails.push(
+            `历史规律：跨 ${rec.weekdayPattern.qualifyingWeeks} 周的 ${rec.weekdayPattern.observationCount} 个${lowestWeekdayName}均值为 ${weekdayMean}（整体均值 ${overallMean}）。`
+          );
+          prepEvidenceDetails.push(
+            `${lowestDay.dateISO}（${lowestWeekdayName}）预估指数：${lowestDay.estimatedEnergy}/100（${lowestConfidence === 'Moderate' ? '中等' : '较低'}置信度 · 基于规律估算）。`
+          );
+        } else {
+          prepEvidenceDetails.push(
+            `歷史規律：跨 ${rec.weekdayPattern.qualifyingWeeks} 週的 ${rec.weekdayPattern.observationCount} 個${lowestWeekdayName}均值為 ${weekdayMean}（整體均值 ${overallMean}）。`
+          );
+          prepEvidenceDetails.push(
+            `${lowestDay.dateISO}（${lowestWeekdayName}）預估指數：${lowestDay.estimatedEnergy}/100（${lowestConfidence === 'Moderate' ? '中等' : '較低'}信心度 · 依規律推算）。`
+          );
+        }
+      } else {
+        if (lang === 'en') {
+          prepEvidenceDetails.push(
+            `Observed ${rec.recordedDaysCount}-day baseline: ${overallMean} overall mean, ${recent7Mean} recent 7-day mean.`
+          );
+          prepEvidenceDetails.push(
+            `Upcoming lower-range estimate (${lowestDay.dateISO} ${lowestWeekdayName}): ${lowestDay.estimatedEnergy}/100 (${lowestConfidence} confidence estimate).`
+          );
+        } else if (lang === 'zh-CN') {
+          prepEvidenceDetails.push(
+            `历史 ${rec.recordedDaysCount} 天记录：整体均值 ${overallMean}，近 7 天均值 ${recent7Mean}。`
+          );
+          prepEvidenceDetails.push(
+            `${lowestDay.dateISO}（${lowestWeekdayName}）预估为 ${lowestDay.estimatedEnergy}/100（规律推算仅供参考）。`
+          );
+        } else {
+          prepEvidenceDetails.push(
+            `歷史 ${rec.recordedDaysCount} 天紀錄：整體均值 ${overallMean}，近 7 天均值 ${recent7Mean}。`
+          );
+          prepEvidenceDetails.push(
+            `${lowestDay.dateISO}（${lowestWeekdayName}）預估為 ${lowestDay.estimatedEnergy}/100（規律推算僅供參考）。`
+          );
+        }
+      }
+      if (sharedSleepNote) prepEvidenceDetails.push(sharedSleepNote);
+
+      const prepTitle =
+        lang === 'en'
+          ? hasEnergyPattern
+            ? `Ease ${lowestWeekdayName} Ahead with a ${prepWeekdayName} Evening Reset`
+            : `Keep ${lowestWeekdayName} Evening Light & Unscheduled`
+          : lang === 'zh-CN'
+            ? hasEnergyPattern
+              ? `提前在${prepWeekdayName}傍晚减负，平稳迎接${lowestWeekdayName}`
+              : `提前为${lowestWeekdayName}预留轻松少事务的夜晚`
+            : hasEnergyPattern
+              ? `提前在${prepWeekdayName}傍晚減負，平穩迎接${lowestWeekdayName}`
+              : `提前為${lowestWeekdayName}預留輕鬆少事務的夜晚`;
+
+      const prepAction =
+        lang === 'en'
+          ? `Prep a low-effort meal or clear routine chores on ${prepWeekdayName} night so ${rec.name} can protect calm evening rest on ${lowestWeekdayName}.`
+          : lang === 'zh-CN'
+            ? `提前在${prepWeekdayName}晚上分担次日琐事或备好清淡餐食，让 ${rec.name} 在${lowestWeekdayName}下班后能轻松歇息。`
+            : `提前在${prepWeekdayName}晚上分擔隔日瑣事或備好清淡餐點，讓 ${rec.name} 在${lowestWeekdayName}下班後能輕鬆歇息。`;
+
+      const prepMeta = normalizeRecommendationMetadata({
+        title: prepTitle,
+        category: 'Rest & Recovery',
+        action: prepAction,
+        why: prepEvidenceDetails[0],
+        suggestedTiming: `${lowestWeekdayName} · ${lowestDay.dateISO}`,
+        actionType: 'quiet_evening',
+        communicationStyle: 'Practical Action',
+        effortLevel: 'Low',
+        requiresSpendingMoney: false,
+      });
+
+      planAheadRecommendations.push({
+        id: `ahead-prep-${lowestDay.dateISO}-${variationSeed}`,
+        title: prepTitle,
+        category: 'Rest & Recovery',
+        timeHorizon: 'ahead',
+        why:
+          lang === 'en'
+            ? hasEnergyPattern
+              ? `Multi-week observations show lower average energy on ${lowestWeekdayName}s; early light prep helps keep the evening unhurried.`
+              : `Pattern-based estimates indicate ${lowestWeekdayName} may be a slightly quieter window where light advance prep helps.`
+            : lang === 'zh-CN'
+              ? hasEnergyPattern
+                ? `多周历史显示 ${lowestWeekdayName} 平均精力相对偏低，提前少做安排能让当晚更舒缓。`
+                : `基于规律推算，${lowestWeekdayName}可能略偏需要恢复，提前保留余地会更自在。`
+              : hasEnergyPattern
+                ? `多週歷史顯示 ${lowestWeekdayName} 平均精力相對偏低，提前少排行程能讓當晚更舒緩。`
+                : `依規律推算，${lowestWeekdayName}可能略偏需要恢復，提前保留餘裕會更自在。`,
+        action: prepAction,
+        suggestedTiming:
+          lang === 'en'
+            ? `Ahead of ${lowestWeekdayName} (${lowestDay.dateISO})`
+            : `${lowestWeekdayName}前后（${lowestDay.dateISO}）`,
+        personalizationReason: prefSummary
+          ? lang === 'en'
+            ? `Respects ${rec.name}'s preferences (${prefSummary}) with zero spending needed.`
+            : lang === 'zh-CN'
+              ? `结合「${prefSummary}」偏好与规律节点提前布置。`
+              : `結合「${prefSummary}」偏好與規律節點提前安排。`
+          : prepEvidenceDetails[0],
+        evidenceSummary: prepEvidenceDetails[0],
+        evidenceDetails: prepEvidenceDetails,
+        targetWeekdayIndex: lowestDay.weekdayIndex,
+        targetDateISO: lowestDay.dateISO,
+        confidence: lowestConfidence,
+        defaultMessage:
+          lang === 'en'
+            ? `Thinking ahead for ${lowestWeekdayName} — happy to keep dinner super light and handle evening cleanup so you can rest.`
+            : lang === 'zh-CN'
+              ? `提前帮你想好了，这周${lowestWeekdayName}晚上我们简简单单吃顿清淡的，家务交给我，你安心休息。`
+              : `提前替你想好了，這週${lowestWeekdayName}晚上我們簡簡單單吃頓清淡的，家務交給我，你安心休息。`,
+        actionType: prepMeta.actionType,
+        communicationStyle: prepMeta.communicationStyle,
+        effortLevel: prepMeta.effortLevel,
+        requiresSpendingMoney: false,
+        tags: ['plan_ahead', 'quiet', 'prep'],
+        fingerprint: prepMeta.fingerprint,
+      });
+
+      // 2. Higher-Energy Day Quality Time / Date Planning Opportunity (Non-purchase)
+      const avoidCrowds = allAvoidText.includes('crowd') || allAvoidText.includes('拥挤') || allAvoidText.includes('擁擠');
+      const suggestedDatePlanId = avoidCrowds ? 'date-cozy-movie' : 'date-evening-walk';
+      const dateTitle =
+        lang === 'en'
+          ? avoidCrowds
+            ? `Plan a Relaxed ${bestWeekdayName} Cozy Film & Tea Night`
+            : `Plan an Unhurried ${bestWeekdayName} Golden-Hour Walk`
+          : lang === 'zh-CN'
+            ? avoidCrowds
+              ? `预约${bestWeekdayName}的居家老电影与热茶时光`
+              : `预约${bestWeekdayName}傍晚的轻松户外散步`
+            : avoidCrowds
+              ? `預約${bestWeekdayName}的居家老電影與熱茶時光`
+              : `預約${bestWeekdayName}傍晚的輕鬆戶外散步`;
+
+      const dateAction =
+        lang === 'en'
+          ? avoidCrowds
+            ? `Invite ${rec.name} to a low-pressure home movie & warm drink evening around ${bestWeekdayName} (${bestDay.dateISO}) when energy is estimated steadier.`
+            : `Propose a relaxed 30–45 minute neighborhood or waterfront walk around ${bestWeekdayName} (${bestDay.dateISO}) when estimated energy looks higher.`
+          : lang === 'zh-CN'
+            ? avoidCrowds
+              ? `在预估精力更舒展的${bestWeekdayName}（${bestDay.dateISO}）前先约一场安静不累的居家电影之夜。`
+              : `在预估精力较充沛的${bestWeekdayName}（${bestDay.dateISO}）附近，轻轻约一场 30 分钟傍晚散步。`
+            : avoidCrowds
+              ? `在預估精力較舒展的${bestWeekdayName}（${bestDay.dateISO}）前先約一場安靜不累的居家電影之夜。`
+              : `在預估精力較充沛的${bestWeekdayName}（${bestDay.dateISO}）附近，輕輕約一場 30 分鐘傍晚散步。`;
+
+      const dateEvidenceDetails: string[] =
+        lang === 'en'
+          ? [
+              `Upcoming ${bestWeekdayName} (${bestDay.dateISO}) estimated energy: ${bestDay.estimatedEnergy}/100 (${bestConfidence} confidence pattern estimate).`,
+              `Filtered against ${rec.name}'s avoid preferences${rec.avoidTags.length > 0 ? ` (${rec.avoidTags.join(', ')})` : ''}.`,
+            ]
+          : lang === 'zh-CN'
+            ? [
+                `${bestDay.dateISO}（${bestWeekdayName}）规律推算精力：${bestDay.estimatedEnergy}/100（估算值，供约会挑日参考）。`,
+                `已自动避开不喜欢的场景偏好。`,
+              ]
+            : [
+                `${bestDay.dateISO}（${bestWeekdayName}）規律推算精力：${bestDay.estimatedEnergy}/100（推算值，供約會挑日參考）。`,
+                `已自動避開不喜歡的場景偏好。`,
+              ];
+
+      const dateMeta = normalizeRecommendationMetadata({
+        title: dateTitle,
+        category: 'Quality Time',
+        action: dateAction,
+        why: dateEvidenceDetails[0],
+        suggestedTiming: `${bestWeekdayName} · ${bestDay.dateISO}`,
+        actionType: 'evening_walk',
+        communicationStyle: 'Shared Activity',
+        effortLevel: 'Low',
+        requiresSpendingMoney: false,
+      });
+
+      planAheadRecommendations.push({
+        id: `ahead-date-${bestDay.dateISO}-${variationSeed}`,
+        title: dateTitle,
+        category: 'Quality Time',
+        timeHorizon: 'ahead',
+        why:
+          lang === 'en'
+            ? `${bestWeekdayName} is estimated as one of the steadier days ahead (${bestDay.estimatedEnergy}/100), making it a natural time for shared quality time.`
+            : lang === 'zh-CN'
+              ? `${bestWeekdayName}在未来 7 天推算中相对平稳舒展（约 ${bestDay.estimatedEnergy}/100），适合轻松预约双方都喜欢的相处时刻。`
+              : `${bestWeekdayName}在未來 7 天推算中相對平穩舒展（約 ${bestDay.estimatedEnergy}/100），適合輕鬆預約雙方都喜歡的相處時刻。`,
+        action: dateAction,
+        suggestedTiming: `${bestWeekdayName} · ${bestDay.dateISO}`,
+        personalizationReason: dateEvidenceDetails[1],
+        evidenceSummary: dateEvidenceDetails[0],
+        evidenceDetails: dateEvidenceDetails,
+        targetWeekdayIndex: bestDay.weekdayIndex,
+        targetDateISO: bestDay.dateISO,
+        suggestedDatePlanId,
+        confidence: bestConfidence,
+        defaultMessage:
+          lang === 'en'
+            ? `Would love to keep ${bestWeekdayName} open for an easy, unhurried evening together if you feel up for it.`
+            : lang === 'zh-CN'
+              ? `这周${bestWeekdayName}如果你状态不错，要不要一起留出一段时间轻松散步或窝着看部电影？`
+              : `這週${bestWeekdayName}如果你狀態不錯，要不要一起留出一段時間輕鬆散步或窩著看部電影？`,
+        actionType: dateMeta.actionType,
+        communicationStyle: dateMeta.communicationStyle,
+        effortLevel: dateMeta.effortLevel,
+        requiresSpendingMoney: false,
+        tags: ['plan_ahead', 'date_planning', 'quality_time'],
+        fingerprint: dateMeta.fingerprint,
+      });
+
+      // 3. Timed Advance Gesture or Optional Pre-Scheduled Treat (strictly respecting avoidPaidSuggestions)
+      const wantsWarmDrinkTreat =
+        !avoidPaid &&
+        (allPrefText.includes('milk tea') ||
+          allPrefText.includes('coffee') ||
+          allPrefText.includes('tea') ||
+          allPrefText.includes('奶茶') ||
+          allPrefText.includes('咖啡'));
+
+      const gestureIsPaid = wantsWarmDrinkTreat;
+      const gestureTitle = gestureIsPaid
+        ? lang === 'en'
+          ? `Schedule a ${lowestWeekdayName} Afternoon Warm Milk Tea Surprise`
+          : lang === 'zh-CN'
+            ? `预约${lowestWeekdayName}午后的热奶茶小惊喜`
+            : `預約${lowestWeekdayName}午後的熱奶茶小驚喜`
+        : lang === 'en'
+          ? `Prepare a ${lowestWeekdayName} Morning Appreciation Note`
+          : lang === 'zh-CN'
+            ? `为${lowestWeekdayName}清晨准备一张提前写好的鼓劲便签`
+            : `為${lowestWeekdayName}清晨準備一張提前寫好的打氣便條`;
+
+      const gestureAction = gestureIsPaid
+        ? lang === 'en'
+          ? `Set a reminder or plan a warm milk tea delivery for ${lowestWeekdayName} afternoon (${lowestDay.dateISO}) as a gentle pick-me-up.`
+          : lang === 'zh-CN'
+            ? `在${lowestWeekdayName}（${lowestDay.dateISO}）下午为 ${rec.name} 提前设定提醒或点一杯温和热奶茶。`
+            : `在${lowestWeekdayName}（${lowestDay.dateISO}）下午為 ${rec.name} 提前設定提醒或點一杯溫和熱奶茶。`
+        : lang === 'en'
+          ? `Write a brief encouraging note the night before to tuck beside ${rec.name}'s mug on ${lowestWeekdayName} morning.`
+          : lang === 'zh-CN'
+            ? `前一晚写好一句温暖肯定，放在 ${rec.name} ${lowestWeekdayName}清晨一定会用到的水杯旁。`
+            : `前一晚寫好一句溫暖肯定，放在 ${rec.name} ${lowestWeekdayName}清晨一定會用到的水杯旁。`;
+
+      const gestureEvidenceDetails = [
+        prepEvidenceDetails[0],
+        gestureIsPaid
+          ? lang === 'en'
+            ? `Matched stated drink preference while keeping ordering entirely manual (never auto-ordered).`
+            : lang === 'zh-CN'
+              ? `匹配已记录饮品偏好；所有下单与提醒均需你手动确认。`
+              : `匹配已紀錄飲品偏好；所有下單與提醒均需你手動確認。`
+          : lang === 'en'
+            ? `Zero-cost surprise option honoring feedback & low-pressure communication style.`
+            : lang === 'zh-CN'
+              ? `零花费小惊喜方案，尊重对方偏好与零压力沟通风格。`
+              : `無需花費小驚喜方案，尊重對方偏好與零壓力溝通風格。`,
+      ];
+
+      const gestureMeta = normalizeRecommendationMetadata({
+        title: gestureTitle,
+        category: 'Small Surprise',
+        action: gestureAction,
+        why: gestureEvidenceDetails[0],
+        suggestedTiming: `${lowestWeekdayName} · ${lowestDay.dateISO}`,
+        actionType: gestureIsPaid ? 'purchase_coffee' : 'handwritten_note',
+        communicationStyle: 'Surprise',
+        effortLevel: 'Low',
+        requiresSpendingMoney: gestureIsPaid,
+      });
+
+      planAheadRecommendations.push({
+        id: `ahead-gesture-${lowestDay.dateISO}-${variationSeed}`,
+        title: gestureTitle,
+        category: 'Small Surprise',
+        timeHorizon: 'ahead',
+        why:
+          lang === 'en'
+            ? `Planning a timed small gesture ahead of ${lowestWeekdayName} adds warmth right when historical averages tend to dip.`
+            : lang === 'zh-CN'
+              ? `提前卡在历史偏累的${lowestWeekdayName}节点送出贴心小意，比事后补救更有陪伴感。`
+              : `提前卡在歷史偏累的${lowestWeekdayName}節點送出貼心小意，比事後補救更有陪伴感。`,
+        action: gestureAction,
+        suggestedTiming: `${lowestWeekdayName} · ${lowestDay.dateISO}`,
+        personalizationReason: gestureEvidenceDetails[1],
+        evidenceSummary: gestureEvidenceDetails[0],
+        evidenceDetails: gestureEvidenceDetails,
+        targetWeekdayIndex: lowestDay.weekdayIndex,
+        targetDateISO: lowestDay.dateISO,
+        confidence: lowestConfidence,
+        defaultMessage: gestureIsPaid
+          ? lang === 'en'
+            ? `Scheduled a warm tea surprise for your ${lowestWeekdayName} afternoon break!`
+            : lang === 'zh-CN'
+              ? `想好在${lowestWeekdayName}下午给你留一杯热奶茶，辛苦的时候暖暖手。`
+              : `想好在${lowestWeekdayName}下午替你留一杯熱奶茶，辛苦的時候暖暖手。`
+          : lang === 'en'
+            ? `Left a quiet note for your ${lowestWeekdayName} morning — no rush today, just cheering you on.`
+            : lang === 'zh-CN'
+              ? `给你留了一张${lowestWeekdayName}早上用的鼓励小纸条，今天按自己舒服的节奏来。`
+              : `替你留了一張${lowestWeekdayName}早上用的鼓勵小紙條，今天依自己舒服的步調來。`,
+        actionType: gestureMeta.actionType,
+        communicationStyle: gestureMeta.communicationStyle,
+        effortLevel: gestureMeta.effortLevel,
+        requiresSpendingMoney: gestureIsPaid,
+        tags: gestureIsPaid ? ['plan_ahead', 'purchase', 'warm_drink'] : ['plan_ahead', 'note', 'surprise'],
+        fingerprint: gestureMeta.fingerprint,
+      });
+
+      planAheadSummary =
+        lang === 'en'
+          ? hasEnergyPattern
+            ? `Based on ${rec.recordedDaysCount} observed days, ${lowestWeekdayName}s trend lower (${weekdayMean} vs ${overallMean} overall), while ${bestWeekdayName} looks steadier (${bestDay.estimatedEnergy}/100 estimate).`
+            : `Based on ${rec.recordedDaysCount} observed days, upcoming estimates range toward ${bestDay.estimatedEnergy}/100 around ${bestWeekdayName} (estimates only).`
+          : lang === 'zh-CN'
+            ? hasEnergyPattern
+              ? `基于 ${rec.recordedDaysCount} 天观测，${lowestWeekdayName}历史均值略低（${weekdayMean} 对比 ${overallMean}），而${bestWeekdayName}预估更平稳（约 ${bestDay.estimatedEnergy}/100，仅供参考）。`
+              : `基于 ${rec.recordedDaysCount} 天观测，未来几天以${bestWeekdayName}较为平稳舒展（约 ${bestDay.estimatedEnergy}/100 推算）。`
+            : hasEnergyPattern
+              ? `依據 ${rec.recordedDaysCount} 天觀測，${lowestWeekdayName}歷史均值略低（${weekdayMean} 對比 ${overallMean}），而${bestWeekdayName}預估更平穩（約 ${bestDay.estimatedEnergy}/100，僅供參考）。`
+              : `依據 ${rec.recordedDaysCount} 天觀測，未來幾天以${bestWeekdayName}較為平穩舒展（約 ${bestDay.estimatedEnergy}/100 推算）。`;
+    }
+  }
 
   // Build transparent, privacy-safe evidence array
   const evidence: string[] = [];
@@ -1245,6 +1743,8 @@ export function generateLocalFallbackCare(
       recipientName: rec.name,
       evidence,
       recommendations,
+      ...(planAheadSummary ? { planAheadSummary } : {}),
+      planAheadRecommendations,
       limitations,
     },
   };

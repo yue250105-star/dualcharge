@@ -4,9 +4,14 @@ import {
   Bell,
   Bookmark,
   Calendar,
+  CalendarClock,
   Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   Clock,
   Coffee,
+  Compass,
   Crown,
   EyeOff,
   Gift,
@@ -24,6 +29,7 @@ import {
   ShoppingBag,
   SkipForward,
   Sparkles,
+  SunMedium,
   ThumbsDown,
   Truck,
   Users,
@@ -41,6 +47,9 @@ import {
   SurpriseDatePlanOption,
 } from '@/src/components/care/SurpriseCareModal';
 import { PremiumFeaturePreview } from '@/src/components/membership/PremiumFeaturePreview';
+import { SubpageHeader } from '@/src/components/phone/SubpageHeader';
+import { ForecastChart } from '@/src/components/ui/Charts';
+import { ExpandableAccordion } from '@/src/components/ui/ExpandableAccordion';
 import { selectNormalCareSuggestions } from '@/src/data/normal/normalCare';
 import { PRESENTATION_CARE_SUGGESTIONS } from '@/src/data/presentation/presentationConstants';
 import { useDualCharge } from '@/src/context/DualChargeContext';
@@ -50,6 +59,7 @@ import {
   buildPresentationCareContext,
 } from '@/src/services/careContextBuilder';
 import { requestAiCareRecommendations } from '@/src/services/careEngineClient';
+import { generateLocalFallbackCare } from '@/src/services/careFallbackEngine';
 import {
   buildDatePlanSuggestions,
   DATE_PLAN_CATEGORIES,
@@ -63,6 +73,7 @@ import {
   canTransitionMockOrderStatus,
   evaluateDueReminders,
   isPurchaseOrientedRecommendation,
+  matchProductForRecommendation,
   MOCK_ORDER_STAGE_SEQUENCE,
 } from '@/src/services/mockDeliveryService';
 import { buildMetadataFromPresetCare } from '@/src/services/recommendationMetadata';
@@ -81,15 +92,29 @@ import {
   SurpriseCareRecord,
 } from '@/src/types/aiCare';
 import {
+  CareScenarioView,
   CareSuggestion,
   DatePlanCategory,
+  ForecastDay,
+  LanguageCode,
   NormalCareSuggestion,
   PartnerId,
+  WeekdayPatternResult,
 } from '@/src/types/dualcharge';
 
 interface CarePageProps {
   partnerId: PartnerId;
   scope?: 'demo' | 'normal';
+}
+
+interface CareDetailSelection {
+  recommendation: AiCareRecommendation;
+  returnTo: 'now' | 'plan_ahead';
+  kind: 'ai' | 'preset';
+  sourceKind: 'gemini' | 'fallback' | 'baseline' | 'preset';
+  presetId?: string;
+  normalSuggestion?: NormalCareSuggestion;
+  demoSuggestion?: CareSuggestion;
 }
 
 function SuggestionIconBadge({ category }: { category: CareSuggestion['category'] }) {
@@ -158,6 +183,8 @@ function presetToAiRecommendation(params: {
   timing: string;
   defaultMessage: string;
   requiresSpendingMoney?: boolean;
+  evidenceSummary?: string;
+  evidenceDetails?: string[];
 }): AiCareRecommendation {
   const meta = buildMetadataFromPresetCare({
     suggestionId: params.id,
@@ -187,6 +214,8 @@ function presetToAiRecommendation(params: {
     requiresSpendingMoney: requiresSpending,
     tags: meta.tags,
     fingerprint: meta.fingerprint,
+    evidenceSummary: params.evidenceSummary ?? params.reason,
+    evidenceDetails: params.evidenceDetails,
   };
 }
 
@@ -650,18 +679,10 @@ interface AiCareEnginePanelProps {
   aiUsageCount: number;
   aiMonthlyLimit: number | null;
   canGenerateAi: boolean;
-  surpriseDisabled?: boolean;
   onUpgrade: () => void;
   onBackToPresets: () => void;
   onGenerate: () => void;
-  onSendAiCare: (rec: AiCareRecommendation, customMessage?: string) => void;
-  onSendAsSurprise: (rec: AiCareRecommendation) => void;
-  onSaveAiSuggestion: (rec: AiCareRecommendation, source: 'gemini' | 'fallback') => void;
-  onDismiss: (rec: AiCareRecommendation) => void;
-  onSkip: (rec: AiCareRecommendation) => void;
-  onOrderNow: (rec: AiCareRecommendation) => void;
-  onRemindLater: (rec: AiCareRecommendation) => void;
-  onNotNow: (rec: AiCareRecommendation) => void;
+  onOpenDetail: (rec: AiCareRecommendation, source: 'gemini' | 'fallback') => void;
 }
 
 function AiCareEnginePanel({
@@ -680,22 +701,11 @@ function AiCareEnginePanel({
   aiUsageCount,
   aiMonthlyLimit,
   canGenerateAi,
-  surpriseDisabled = false,
   onUpgrade,
   onBackToPresets,
   onGenerate,
-  onSendAiCare,
-  onSendAsSurprise,
-  onSaveAiSuggestion,
-  onDismiss,
-  onSkip,
-  onOrderNow,
-  onRemindLater,
-  onNotNow,
+  onOpenDetail,
 }: AiCareEnginePanelProps) {
-  const [editingAiId, setEditingAiId] = useState<string | null>(null);
-  const [aiDrafts, setAiDrafts] = useState<Record<string, string>>({});
-
   const visibleRecommendations = useMemo(() => {
     if (!result) return [];
     return result.data.recommendations.filter(
@@ -706,43 +716,8 @@ function AiCareEnginePanel({
     );
   }, [result, dismissedIds, skippedIds, hiddenByReminderIds]);
 
-  const toggleAiCustomize = (rec: AiCareRecommendation) => {
-    if (editingAiId === rec.id) {
-      setEditingAiId(null);
-      setAiDrafts((prev) => {
-        const next = { ...prev };
-        delete next[rec.id];
-        return next;
-      });
-      return;
-    }
-    setEditingAiId(rec.id);
-    if (aiDrafts[rec.id] === undefined) {
-      setAiDrafts((prev) => ({
-        ...prev,
-        [rec.id]: rec.defaultMessage,
-      }));
-    }
-  };
-
-  const handleSend = (rec: AiCareRecommendation) => {
-    const rawDraft = aiDrafts[rec.id];
-    const customMsg =
-      rawDraft !== undefined &&
-      rawDraft.trim() !== '' &&
-      rawDraft.trim() !== rec.defaultMessage.trim()
-        ? rawDraft
-        : undefined;
-    onSendAiCare(rec, customMsg);
-    setEditingAiId(null);
-  };
-
   return (
-    <section
-      aria-label={t.care.aiEngine.panelTitle}
-      className="space-y-3 pt-1"
-    >
-      {/* Header & Generate CTA */}
+    <section aria-label={t.care.aiEngine.panelTitle} className="space-y-3 pt-1">
       <div className="bg-gradient-to-br from-[#FBF7F5] via-white to-[#F4F1F9] rounded-[22px] p-4 ring-1 ring-[#9B93B8]/20 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.07)] space-y-3">
         <div className="flex items-start justify-between gap-2.5">
           <div className="min-w-0">
@@ -785,14 +760,11 @@ function AiCareEnginePanel({
             <p className="text-[11.5px] text-[#85838D] mt-1.5 leading-relaxed">
               {t.care.aiEngine.panelSubtitle}
             </p>
-            <p className="text-[10.5px] text-[#706794] mt-1 leading-snug">
-              {t.care.senderVsReceiverNote}
-            </p>
           </div>
         </div>
 
         {!result && !isLoading && canGenerateAi && (
-          <div className="rounded-2xl bg-white/85 border border-[#292832]/[0.05] p-3 space-y-2">
+          <div className="rounded-2xl bg-white/85 border border-[#292832]/[0.05] p-3 space-y-1.5">
             <div className="text-[12.5px] font-semibold text-[#292832]">
               {t.care.aiEngine.initialPromptTitle}
             </div>
@@ -842,7 +814,6 @@ function AiCareEnginePanel({
 
         {result && (
           <div className="space-y-2.5 pt-1 border-t border-[#292832]/[0.06]">
-            {/* Honest source / fallback indicator */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               {result.source === 'gemini' ? (
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#3D5E49] bg-[#8FA89B]/20 px-2.5 py-0.5 rounded-lg">
@@ -859,7 +830,9 @@ function AiCareEnginePanel({
                 </span>
               )}
               <span className="text-[10.5px] text-[#85838D]">
-                {formatTemplate(t.care.forRecipient, { name: result.data.recipientName || recipientName })}
+                {formatTemplate(t.care.forRecipient, {
+                  name: result.data.recipientName || recipientName,
+                })}
               </span>
             </div>
 
@@ -867,11 +840,7 @@ function AiCareEnginePanel({
               <div className="rounded-2xl bg-[#FBF2E6] border border-[#E5C89E]/40 px-3 py-2 text-[11px] text-[#6E4F28] leading-snug">
                 <span className="font-semibold">{t.care.aiEngine.fallbackNoticePrefix} </span>
                 <span>
-                  {
-                    t.care.aiEngine.fallbackReasons[
-                      result.fallbackReason ?? 'api_error'
-                    ]
-                  }
+                  {t.care.aiEngine.fallbackReasons[result.fallbackReason ?? 'api_error']}
                 </span>
               </div>
             )}
@@ -880,40 +849,38 @@ function AiCareEnginePanel({
               {result.data.summary}
             </p>
 
-            {/* Evidence list */}
-            {result.data.evidence.length > 0 && (
-              <div className="rounded-2xl bg-white/80 border border-[#292832]/[0.05] p-3 space-y-1.5">
-                <div className="text-[11px] font-semibold text-[#706794]">
-                  {t.care.aiEngine.evidenceTitle}
+            {(result.data.evidence.length > 0 || result.data.limitations) && (
+              <ExpandableAccordion
+                title={t.care.aiEngine.evidenceTitle}
+                subtitle={t.care.aiEngine.limitationsTitle}
+                icon={<ShieldCheck className="w-4 h-4 text-[#8FA89B]" />}
+              >
+                <div className="space-y-2">
+                  {result.data.evidence.length > 0 && (
+                    <ul className="space-y-1">
+                      {result.data.evidence.map((ev, idx) => (
+                        <li
+                          key={`${idPrefix}-ev-${idx}`}
+                          className="text-[11px] text-[#292832]/85 leading-snug flex items-start gap-1.5"
+                        >
+                          <span className="text-[#9B93B8] mt-0.5 shrink-0">•</span>
+                          <span>{ev}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="pt-1.5 border-t border-[#292832]/[0.06] space-y-1 text-[10.5px] text-[#85838D]">
+                    <p>{result.data.limitations}</p>
+                    <p className="text-[#706794]/90">{t.care.aiEngine.feedbackNote}</p>
+                    <p>{t.care.senderVsReceiverNote}</p>
+                  </div>
                 </div>
-                <ul className="space-y-1">
-                  {result.data.evidence.map((ev, idx) => (
-                    <li
-                      key={`${idPrefix}-ev-${idx}`}
-                      className="text-[11px] text-[#292832]/80 leading-snug flex items-start gap-1.5"
-                    >
-                      <span className="text-[#9B93B8] mt-0.5 shrink-0">•</span>
-                      <span>{ev}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              </ExpandableAccordion>
             )}
-
-            {/* Responsible limitations & feedback clarification */}
-            <div className="rounded-2xl bg-[#FDFBFA] border border-[#292832]/[0.05] px-3 py-2 space-y-1 text-[10.5px] text-[#85838D] leading-snug">
-              <div className="flex items-center gap-1 font-semibold text-[#292832]/75">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#8FA89B] shrink-0" />
-                <span>{t.care.aiEngine.limitationsTitle}</span>
-              </div>
-              <p>{result.data.limitations}</p>
-              <p className="text-[#706794]/90">{t.care.aiEngine.feedbackNote}</p>
-            </div>
           </div>
         )}
       </div>
 
-      {/* Empty state if all generated items were hidden/skipped */}
       {result && visibleRecommendations.length === 0 && (
         <div className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] text-center space-y-2">
           <p className="font-display text-[14px] font-semibold text-[#292832]">
@@ -925,7 +892,7 @@ function AiCareEnginePanel({
         </div>
       )}
 
-      {/* AI Generated Recommendation Cards */}
+      {/* Concise AI Recommendation Summary Cards -> tap to open dedicated Detail Subpage */}
       {visibleRecommendations.map((rec) => {
         const isSaved = savedAiSuggestions.some(
           (item) =>
@@ -934,24 +901,17 @@ function AiCareEnginePanel({
               item.metadata?.fingerprint === rec.fingerprint) ||
             item.title.toLowerCase() === rec.title.toLowerCase()
         );
-        const isEditing = editingAiId === rec.id;
-        const draftValue = aiDrafts[rec.id] ?? rec.defaultMessage;
         const localizedCategory = t.care.aiEngine.categories[rec.category] ?? rec.category;
         const localizedConfidence =
           t.care.aiEngine.confidenceLevels[rec.confidence] ?? rec.confidence;
-        const localizedStyle = rec.communicationStyle
-          ? t.care.aiEngine.communicationStyles[rec.communicationStyle] ?? rec.communicationStyle
-          : null;
-        const localizedEffort = rec.effortLevel
-          ? t.care.aiEngine.effortLevels[rec.effortLevel] ?? rec.effortLevel
-          : null;
-
         const isPurchase = isPurchaseOrientedRecommendation(rec);
 
         return (
-          <article
+          <button
             key={rec.id}
-            className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] ring-1 ring-[#292832]/[0.04] space-y-3 transition-shadow duration-300 hover:shadow-[0_14px_34px_-10px_rgba(41,40,50,0.09)]"
+            type="button"
+            onClick={() => onOpenDetail(rec, result?.source ?? 'fallback')}
+            className="w-full text-left bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] ring-1 ring-[#292832]/[0.04] hover:ring-[#E88C7D]/45 transition-all active:scale-[0.985] space-y-2.5"
           >
             <div className="flex items-start gap-3">
               <AiCategoryBadge category={rec.category} />
@@ -960,237 +920,900 @@ function AiCareEnginePanel({
                   <span className="text-[10.5px] font-semibold text-[#706794]">
                     {localizedCategory}
                   </span>
-                  <span className="text-[10px] font-medium text-[#85838D] bg-[#F4EFEA] px-2 py-0.5 rounded-lg">
-                    {t.care.aiEngine.confidenceLabel} {localizedConfidence}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {isSaved && (
+                      <span className="text-[10px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
+                        {t.care.saved}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-medium text-[#85838D] bg-[#F4EFEA] px-2 py-0.5 rounded-lg">
+                      {localizedConfidence}
+                    </span>
+                  </div>
                 </div>
                 <h3 className="font-display text-[15px] font-semibold text-[#292832] leading-snug">
                   {rec.title}
                 </h3>
-                {(localizedStyle || localizedEffort || isPurchase) && (
-                  <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                    {isPurchase && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#B45A4C] bg-[#F5E8E7] px-2 py-0.5 rounded-lg">
-                        <ShoppingBag className="w-2.5 h-2.5" />
-                        <span>{t.deliveryCare.purchaseBadge}</span>
-                      </span>
-                    )}
-                    {localizedStyle && (
-                      <span className="text-[10px] font-medium text-[#5B527E] bg-[#EFEDF5]/75 px-2 py-0.5 rounded-lg">
-                        {localizedStyle}
-                      </span>
-                    )}
-                    {localizedEffort && (
-                      <span className="text-[10px] font-medium text-[#85838D] bg-[#FDFBFA] border border-[#292832]/[0.06] px-2 py-0.5 rounded-lg">
-                        {localizedEffort}
-                      </span>
-                    )}
-                  </div>
+                <p className="text-[12px] text-[#85838D] leading-snug mt-1 line-clamp-2">
+                  {rec.action}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#292832]/[0.05]">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#85838D] min-w-0">
+                {isPurchase ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#B45A4C] bg-[#F5E8E7] px-2 py-0.5 rounded-lg shrink-0">
+                    <ShoppingBag className="w-2.5 h-2.5" />
+                    <span>{t.deliveryCare.purchaseBadge}</span>
+                  </span>
+                ) : (
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
                 )}
+                <span className="truncate">{rec.suggestedTiming}</span>
               </div>
+              <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#C45E4E] shrink-0">
+                <span>{t.ia.care.detailOpenCta}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </span>
             </div>
-
-            <div className="bg-[#FDFBFA] rounded-2xl p-3 space-y-1.5 text-[11.5px] border border-[#292832]/[0.04]">
-              <p className="text-[#292832]/85 leading-snug">
-                <span className="font-semibold text-[#292832]">{t.care.aiEngine.whyLabel} </span>
-                {rec.why}
-              </p>
-              <p className="text-[#292832]/90 leading-snug">
-                <span className="font-semibold text-[#292832]">{t.care.aiEngine.whatLabel} </span>
-                {rec.action}
-              </p>
-              <div className="flex items-center gap-1.5 text-[#85838D]">
-                <Clock className="w-3.5 h-3.5 shrink-0" strokeWidth={1.9} />
-                <span>
-                  <span className="font-medium text-[#292832]/80">{t.care.aiEngine.whenLabel} </span>
-                  {rec.suggestedTiming}
-                </span>
-              </div>
-              <p className="text-[#706794] leading-snug">
-                <span className="font-semibold">{t.care.aiEngine.personalizationLabel} </span>
-                {rec.personalizationReason}
-              </p>
-            </div>
-
-            {isPurchase ? (
-              <div className="space-y-2 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => onOrderNow(rec)}
-                  className="w-full min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12.5px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_8px_18px_-6px_rgba(232,140,125,0.55)] transition-all duration-200 active:scale-[0.98]"
-                >
-                  <ShoppingBag className="w-4 h-4 shrink-0" strokeWidth={2} />
-                  <span>{t.deliveryCare.orderNowBtn}</span>
-                </button>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onRemindLater(rec)}
-                    className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
-                  >
-                    <Bell className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                    <span className="truncate">{t.deliveryCare.remindLaterBtn}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onNotNow(rec)}
-                    className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
-                  >
-                    <EyeOff className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                    <span className="truncate">{t.deliveryCare.notNowBtn}</span>
-                  </button>
-                </div>
-
-                <div className="pt-1 border-t border-[#292832]/[0.05] flex items-center justify-end">
-                  <button
-                    type="button"
-                    onClick={() => onSaveAiSuggestion(rec, result?.source ?? 'fallback')}
-                    aria-pressed={isSaved}
-                    className={`min-h-[32px] px-3 py-1 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all active:scale-95 ${
-                      isSaved
-                        ? 'bg-[#EFEDF5] text-[#5B527E]'
-                        : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
-                    }`}
-                  >
-                    {isSaved ? (
-                      <Check className="w-3 h-3 shrink-0" strokeWidth={2.2} />
-                    ) : (
-                      <Bookmark className="w-3 h-3 shrink-0" strokeWidth={2} />
-                    )}
-                    <span>{isSaved ? t.care.saved : t.care.saveSuggestion}</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => toggleAiCustomize(rec)}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#706794] hover:underline active:scale-95 transition-transform"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>{isEditing ? t.care.hideMessageEditor : t.care.editMessage}</span>
-                  </button>
-
-                  {isEditing && (
-                    <div className="mt-2">
-                      <label
-                        htmlFor={`ai-care-msg-${idPrefix}-${rec.id}`}
-                        className="block text-[11px] font-medium text-[#85838D] mb-1"
-                      >
-                        {formatTemplate(t.care.customMessageLabel, { name: recipientName })}
-                      </label>
-                      <textarea
-                        id={`ai-care-msg-${idPrefix}-${rec.id}`}
-                        rows={2}
-                        value={draftValue}
-                        onChange={(e) =>
-                          setAiDrafts((prev) => ({
-                            ...prev,
-                            [rec.id]: e.target.value,
-                          }))
-                        }
-                        className="w-full rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 p-2.5 text-[12px] text-[#292832] focus:outline-none focus:ring-2 focus:ring-[#E88C7D]"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Primary actions: Send Care & Save Suggestion */}
-                <div className="grid grid-cols-2 gap-2 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSend(rec)}
-                    className="min-h-[42px] px-3 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_-6px_rgba(232,140,125,0.55)] transition-all duration-200 active:scale-95"
-                  >
-                    <Send className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                    <span className="truncate">{t.care.sendCare}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onSaveAiSuggestion(rec, result?.source ?? 'fallback')}
-                    aria-pressed={isSaved}
-                    className={`min-h-[42px] px-3 py-2 rounded-2xl text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 ${
-                      isSaved
-                        ? 'bg-[#EFEDF5] text-[#5B527E] ring-1 ring-[#9B93B8]/40'
-                        : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
-                    }`}
-                  >
-                    {isSaved ? (
-                      <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
-                    ) : (
-                      <Bookmark className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                    )}
-                    <span className="truncate">{isSaved ? t.care.saved : t.care.saveSuggestion}</span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={surpriseDisabled}
-                  onClick={() =>
-                    onSendAsSurprise(
-                      draftValue.trim() && draftValue.trim() !== rec.defaultMessage.trim()
-                        ? { ...rec, defaultMessage: draftValue.trim() }
-                        : rec
-                    )
-                  }
-                  title={surpriseDisabled ? t.surpriseCare.normalUnpairedHint : undefined}
-                  className="w-full min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] disabled:opacity-50 text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-[0.98]"
-                >
-                  <Gift className="w-3.5 h-3.5 shrink-0 text-[#C45E4E]" strokeWidth={2} />
-                  <span>{t.surpriseCare.sendAsSurpriseBtn}</span>
-                </button>
-
-                {/* Sender-only non-learning Skip & Hide actions */}
-                <div className="pt-1 border-t border-[#292832]/[0.05] flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onSkip(rec)}
-                    className="min-h-[34px] px-3 py-1 rounded-xl bg-[#FDFBFA] hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[11px] font-medium inline-flex items-center gap-1.5 transition-all active:scale-95"
-                  >
-                    <SkipForward className="w-3 h-3 shrink-0" strokeWidth={2} />
-                    <span>{t.care.skipBtn}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onDismiss(rec)}
-                    className="min-h-[34px] px-3 py-1 rounded-xl bg-[#FDFBFA] hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[11px] font-medium inline-flex items-center gap-1.5 transition-all active:scale-95"
-                  >
-                    <EyeOff className="w-3 h-3 shrink-0" strokeWidth={2} />
-                    <span>{t.care.aiEngine.dismissBtn}</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </article>
+          </button>
         );
       })}
     </section>
   );
 }
 
+function ExpandableEvidencePanel({
+  t,
+  evidenceSummary,
+  evidenceDetails,
+  accentTone = 'warm',
+}: {
+  t: TranslationDictionary;
+  evidenceSummary?: string;
+  evidenceDetails?: string[];
+  accentTone?: 'warm' | 'cool';
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (!evidenceSummary && (!evidenceDetails || evidenceDetails.length === 0)) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((prev) => !prev)}
+        className={`inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+          accentTone === 'cool'
+            ? 'text-[#5B527E] hover:text-[#3E365F]'
+            : 'text-[#B45A4C] hover:text-[#8E4D42]'
+        }`}
+      >
+        <span>
+          {expanded
+            ? t.care.stage58.careForNow.evidenceToggleHide
+            : t.care.stage58.careForNow.evidenceToggleShow}
+        </span>
+        {expanded ? (
+          <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+        )}
+      </button>
+
+      {expanded && (
+        <div
+          className={`rounded-2xl p-3 space-y-1.5 text-[11px] leading-snug border ${
+            accentTone === 'cool'
+              ? 'bg-[#F7F6FC] border-[#9B93B8]/25 text-[#292832]/85'
+              : 'bg-[#FDF6F3] border-[#E88C7D]/25 text-[#292832]/85'
+          }`}
+        >
+          {evidenceSummary && <p className="font-medium text-[#292832]">{evidenceSummary}</p>}
+          {evidenceDetails && evidenceDetails.length > 0 && (
+            <ul className="space-y-1">
+              {evidenceDetails.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-1.5">
+                  <span
+                    className={
+                      accentTone === 'cool'
+                        ? 'text-[#706794] mt-0.5 shrink-0'
+                        : 'text-[#C45E4E] mt-0.5 shrink-0'
+                    }
+                  >
+                    •
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CareForNowHeaderProps {
+  t: TranslationDictionary;
+  energyShared: boolean;
+  currentEnergy?: number | null;
+  recipientName: string;
+}
+
+function CareForNowHeader({
+  t,
+  energyShared,
+  currentEnergy,
+  recipientName,
+}: CareForNowHeaderProps) {
+  return (
+    <div className="bg-gradient-to-br from-[#FBF2ED] via-white to-[#FDF8F5] rounded-[22px] p-4 ring-1 ring-[#E88C7D]/25 shadow-[0_10px_28px_-10px_rgba(232,140,125,0.16)] space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="inline-flex items-center gap-1.5">
+          <div className="w-8 h-8 rounded-xl bg-[#F5E8E7] flex items-center justify-center shrink-0">
+            <SunMedium className="w-4 h-4 text-[#C45E4E]" strokeWidth={2} />
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#B45A4C]">
+              {t.care.stage58.careForNow.badge}
+            </div>
+            <h2 className="font-display text-[15.5px] font-semibold text-[#292832] leading-tight">
+              {t.care.stage58.careForNow.title}
+            </h2>
+          </div>
+        </div>
+        {energyShared && currentEnergy !== null && currentEnergy !== undefined && (
+          <span className="text-[11px] font-semibold text-[#8E4D42] bg-[#F5E8E7] px-2.5 py-1 rounded-xl tabular-nums">
+            {formatTemplate(t.care.stage58.careForNow.todayEnergyChip, { score: currentEnergy })}
+          </span>
+        )}
+      </div>
+
+      <p className="text-[12px] text-[#292832]/85 font-medium leading-snug">
+        {t.care.stage58.careForNow.subtitle}
+      </p>
+      <div className="text-[11px] text-[#85838D] flex items-center justify-between gap-2 flex-wrap pt-0.5">
+        <span>{t.care.stage58.careForNow.kickerQuestion}</span>
+        <span className="text-[10.5px] font-medium text-[#B45A4C]">
+          {formatTemplate(t.care.forRecipient, { name: recipientName })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface PlanAheadSectionProps {
+  t: TranslationDictionary;
+  language: LanguageCode;
+  recipientName: string;
+  energyShared: boolean;
+  sleepShared: boolean;
+  canShowFutureForecast: boolean;
+  forecastDays: ForecastDay[];
+  overallMean: number | null;
+  recent7DayMean: number | null;
+  recordedDaysCount: number;
+  pattern: WeekdayPatternResult | null;
+  normalProgress?: { recordedDays: number; maxWeeks: number };
+  recommendations: AiCareRecommendation[];
+  planAheadSummary?: string;
+  sourceKind: 'gemini' | 'fallback' | 'baseline';
+  savedAiSuggestions: AiCareSavedItem[];
+  dismissedIds: string[];
+  hiddenByReminderIds: string[];
+  onOpenDetail: (rec: AiCareRecommendation, sourceKind: 'gemini' | 'fallback' | 'baseline') => void;
+}
+
+function PlanAheadSection({
+  t,
+  language,
+  recipientName,
+  energyShared,
+  sleepShared,
+  canShowFutureForecast,
+  forecastDays,
+  overallMean,
+  recent7DayMean,
+  recordedDaysCount,
+  pattern,
+  normalProgress,
+  recommendations,
+  planAheadSummary,
+  sourceKind,
+  savedAiSuggestions,
+  dismissedIds,
+  hiddenByReminderIds,
+  onOpenDetail,
+}: PlanAheadSectionProps) {
+  const defaultSelectedISO =
+    forecastDays.find((d) => d.isHighlighted)?.dateISO ?? forecastDays[0]?.dateISO ?? '';
+  const [selectedForecastISO, setSelectedForecastISO] = useState<string>(defaultSelectedISO);
+
+  useEffect(() => {
+    if (forecastDays.length > 0 && !forecastDays.some((d) => d.dateISO === selectedForecastISO)) {
+      const nextDefault =
+        forecastDays.find((d) => d.isHighlighted)?.dateISO ?? forecastDays[0].dateISO;
+      setSelectedForecastISO(nextDefault);
+    }
+  }, [forecastDays, selectedForecastISO]);
+
+  const selectedDay =
+    forecastDays.find((d) => d.dateISO === selectedForecastISO) ?? forecastDays[0] ?? null;
+
+  const visibleFutureRecs = recommendations.filter(
+    (rec) => !dismissedIds.includes(rec.id) && !hiddenByReminderIds.includes(rec.id)
+  );
+
+  const formatShortDayDate = (day: ForecastDay) => {
+    const month = t.calendar.monthsShort[day.monthIndex];
+    if (language === 'en') {
+      return `${day.dayOfMonth} ${month}`;
+    }
+    return `${month}${day.dayOfMonth}日`;
+  };
+
+  return (
+    <section aria-label={t.care.stage58.planAhead.title} className="space-y-3">
+      <div className="bg-gradient-to-br from-[#F2F0FA] via-white to-[#EEF3F8] rounded-[22px] p-4 ring-1 ring-[#9B93B8]/30 shadow-[0_10px_28px_-10px_rgba(91,82,126,0.14)] space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="inline-flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-[#E8E4F3] flex items-center justify-center shrink-0">
+              <Compass className="w-4 h-4 text-[#5B527E]" strokeWidth={2} />
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#706794]">
+                {t.care.stage58.planAhead.badge}
+              </div>
+              <h2 className="font-display text-[15.5px] font-semibold text-[#292832] leading-tight">
+                {t.care.stage58.planAhead.title}
+              </h2>
+            </div>
+          </div>
+          <span className="text-[10.5px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2.5 py-1 rounded-xl">
+            {t.care.stage58.planAhead.estimateBadge}
+          </span>
+        </div>
+
+        <p className="text-[12px] text-[#292832]/85 font-medium leading-snug">
+          {t.care.stage58.planAhead.subtitle}
+        </p>
+        <p className="text-[11px] text-[#706794] leading-snug">
+          {t.care.stage58.planAhead.kickerQuestion}
+        </p>
+      </div>
+
+      {!energyShared ? (
+        <div className="bg-white/90 rounded-[22px] p-4 ring-1 ring-[#9B93B8]/20 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.05)] space-y-1.5">
+          <div className="text-[13.5px] font-semibold text-[#292832]">
+            {t.care.stage58.planAhead.privacyPausedTitle}
+          </div>
+          <p className="text-[12px] text-[#85838D] leading-relaxed">
+            {formatTemplate(t.care.stage58.planAhead.privacyPausedBody, {
+              partner: recipientName,
+            })}
+          </p>
+        </div>
+      ) : !canShowFutureForecast ? (
+        <div className="bg-white/90 rounded-[22px] p-4 ring-1 ring-[#9B93B8]/25 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.05)] space-y-2.5">
+          <div className="text-[13.5px] font-semibold text-[#292832]">
+            {t.care.stage58.planAhead.coldStartEmptyTitle}
+          </div>
+          <p className="text-[12px] text-[#85838D] leading-relaxed">
+            {t.care.stage58.planAhead.coldStartEmptyBody}
+          </p>
+          {normalProgress && (
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="rounded-xl bg-[#F4F1F9] px-3 py-2 text-[11px] font-semibold text-[#5B527E] tabular-nums">
+                {formatTemplate(t.care.stage58.planAhead.coldStartDaysProgress, {
+                  count: normalProgress.recordedDays,
+                })}
+              </div>
+              <div className="rounded-xl bg-[#F4F1F9] px-3 py-2 text-[11px] font-semibold text-[#5B527E] tabular-nums">
+                {formatTemplate(t.care.stage58.planAhead.coldStartWeeksProgress, {
+                  weeks: normalProgress.maxWeeks,
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-[22px] p-4 ring-1 ring-[#9B93B8]/20 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3">
+          <div>
+            <h3 className="font-display text-[14px] font-semibold text-[#292832]">
+              {t.care.stage58.planAhead.overviewTitle}
+            </h3>
+            <p className="text-[11px] text-[#85838D] leading-snug mt-0.5">
+              {t.care.stage58.planAhead.overviewSubtitle}
+            </p>
+          </div>
+
+          {forecastDays.length > 0 && (
+            <ForecastChart
+              days={forecastDays}
+              selectedDateISO={selectedForecastISO}
+              onSelectDay={(day) => setSelectedForecastISO(day.dateISO)}
+            />
+          )}
+
+          {selectedDay && (
+            <div className="rounded-2xl bg-[#F7F6FC] border border-[#9B93B8]/25 p-3 space-y-1.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[12px] font-semibold text-[#292832] tabular-nums">
+                  {selectedDay.estimatedEnergy !== null
+                    ? formatTemplate(t.care.stage58.planAhead.selectedDayEstimateLabel, {
+                        day: t.calendar.weekdaysFull[selectedDay.weekdayIndex],
+                        date: formatShortDayDate(selectedDay),
+                        score: selectedDay.estimatedEnergy,
+                      })
+                    : `${t.calendar.weekdaysFull[selectedDay.weekdayIndex]} (${formatShortDayDate(selectedDay)})`}
+                </span>
+                <span className="text-[10.5px] font-semibold text-[#5B527E] bg-white px-2 py-0.5 rounded-lg border border-[#9B93B8]/25">
+                  {t.care.stage58.planAhead.confidencePrefix}{' '}
+                  {t.care.stage58.planAhead.confidenceLabels[selectedDay.confidence]}
+                </span>
+              </div>
+
+              {overallMean !== null && recent7DayMean !== null && (
+                <div className="flex items-center gap-2 flex-wrap text-[11px] text-[#706794] tabular-nums">
+                  <span className="font-medium text-[#5B527E]">
+                    {t.care.stage58.planAhead.observedHistoryLabel}:
+                  </span>
+                  <span>
+                    {formatTemplate(t.care.stage58.planAhead.overallMeanChip, {
+                      score: overallMean,
+                    })}
+                  </span>
+                  <span>·</span>
+                  <span>
+                    {formatTemplate(t.care.stage58.planAhead.recent7Chip, {
+                      score: recent7DayMean,
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {pattern && pattern.hasPattern && pattern.detectedWeekdayIndex !== null ? (
+            <div className="rounded-2xl bg-[#FDF7F4] border border-[#E88C7D]/25 px-3 py-2.5 space-y-1 text-[11.5px] text-[#292832]/90">
+              <p className="leading-snug font-medium">
+                {formatTemplate(t.care.stage58.planAhead.patternCalloutTemplate, {
+                  count: pattern.observationCount,
+                  weekday: t.calendar.weekdaysFull[pattern.detectedWeekdayIndex],
+                  weeks: pattern.qualifyingWeeks,
+                  weekdayMean: pattern.weekdayMean ?? 0,
+                  overallMean: pattern.overallMean,
+                  pct: Math.round(pattern.percentageBelowBaseline),
+                })}
+              </p>
+              {sleepShared && pattern.prevNightAvgSleepHours !== null && (
+                <p className="text-[11px] text-[#8E4D42] leading-snug">
+                  {formatTemplate(t.care.stage58.planAhead.patternSleepCorrelationTemplate, {
+                    weekday: t.calendar.weekdaysFull[pattern.detectedWeekdayIndex],
+                    hours: pattern.prevNightAvgSleepHours,
+                  })}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-[#EEF3F1] border border-[#8FA89B]/25 px-3 py-2.5 text-[11.5px] text-[#3D5E49] leading-snug">
+              {formatTemplate(t.care.stage58.planAhead.steadyPatternNotice, {
+                days: recordedDaysCount,
+              })}
+            </div>
+          )}
+
+          {planAheadSummary && (
+            <p className="text-[11.5px] text-[#5B527E] leading-relaxed">{planAheadSummary}</p>
+          )}
+        </div>
+      )}
+
+      {/* Concise Future Care Recommendation Cards -> open Recommendation Detail subpage */}
+      {energyShared && canShowFutureForecast && visibleFutureRecs.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="px-0.5 space-y-0.5">
+            <h3 className="font-display text-[14.5px] font-semibold text-[#292832]">
+              {t.care.stage58.planAhead.futureRecommendationsTitle}
+            </h3>
+            <p className="text-[11px] text-[#85838D] leading-snug">
+              {t.care.stage58.planAhead.futureRecommendationsSubtitle}
+            </p>
+          </div>
+
+          {visibleFutureRecs.map((rec) => {
+            const isSaved = savedAiSuggestions.some(
+              (item) =>
+                item.id === rec.id ||
+                (Boolean(item.metadata?.fingerprint && rec.fingerprint) &&
+                  item.metadata?.fingerprint === rec.fingerprint) ||
+                item.title.toLowerCase() === rec.title.toLowerCase()
+            );
+            const localizedCategory = t.care.aiEngine.categories[rec.category] ?? rec.category;
+            const localizedConfidence =
+              t.care.aiEngine.confidenceLevels[rec.confidence] ?? rec.confidence;
+            const isPurchase = isPurchaseOrientedRecommendation(rec);
+
+            return (
+              <button
+                key={rec.id}
+                type="button"
+                onClick={() => onOpenDetail(rec, sourceKind)}
+                className="w-full text-left bg-white rounded-[22px] p-4 ring-1 ring-[#9B93B8]/25 shadow-[0_10px_30px_-10px_rgba(91,82,126,0.08)] hover:ring-[#9B93B8]/55 transition-all active:scale-[0.985] space-y-2.5"
+              >
+                <div className="flex items-start gap-3">
+                  <AiCategoryBadge category={rec.category} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2 flex-wrap mb-0.5">
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
+                        <CalendarClock className="w-3 h-3 shrink-0" />
+                        <span>{rec.suggestedTiming}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {isSaved && (
+                          <span className="text-[10px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
+                            {t.care.saved}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-medium text-[#706794] bg-[#F7F6FC] px-2 py-0.5 rounded-lg border border-[#9B93B8]/20">
+                          {localizedConfidence}
+                        </span>
+                      </div>
+                    </div>
+                    <h4 className="font-display text-[15px] font-semibold text-[#292832] leading-snug mt-1">
+                      {rec.title}
+                    </h4>
+                    <div className="text-[10.5px] text-[#85838D] mt-0.5">
+                      {localizedCategory} · {t.care.stage58.planAhead.estimateBadge}
+                    </div>
+                    <p className="text-[12px] text-[#292832]/80 mt-1 leading-snug line-clamp-2">
+                      {rec.action}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#292832]/[0.05]">
+                  <span className="text-[10.5px] font-medium text-[#706794]">
+                    {isPurchase ? t.deliveryCare.purchaseBadge : t.care.stage58.planAhead.badge}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#5B527E] shrink-0">
+                    <span>{t.ia.care.detailOpenCta}</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface RecommendationDetailViewProps {
+  detail: CareDetailSelection;
+  idPrefix: string;
+  recipientName: string;
+  t: TranslationDictionary;
+  language: LanguageCode;
+  draftMessage: string;
+  onChangeDraft: (msg: string) => void;
+  isSaved: boolean;
+  surpriseDisabled?: boolean;
+  onBack: () => void;
+  onSendCare: (customMsg?: string) => void;
+  onSave: () => void;
+  onSendAsSurprise: () => void;
+  onOrderNow: () => void;
+  onRemindLater: () => void;
+  onNotNow: () => void;
+  onSkip: () => void;
+  onDismissAi?: () => void;
+  onPlanDate?: () => void;
+}
+
+function RecommendationDetailView({
+  detail,
+  idPrefix,
+  recipientName,
+  t,
+  language,
+  draftMessage,
+  onChangeDraft,
+  isSaved,
+  surpriseDisabled = false,
+  onBack,
+  onSendCare,
+  onSave,
+  onSendAsSurprise,
+  onOrderNow,
+  onRemindLater,
+  onNotNow,
+  onSkip,
+  onDismissAi,
+  onPlanDate,
+}: RecommendationDetailViewProps) {
+  const { recommendation: rec } = detail;
+  const isPurchase =
+    detail.demoSuggestion?.requiresSpendingMoney === true || isPurchaseOrientedRecommendation(rec);
+  const localizedCategory = t.care.aiEngine.categories[rec.category] ?? rec.category;
+  const localizedConfidence = t.care.aiEngine.confidenceLevels[rec.confidence] ?? rec.confidence;
+  const localizedStyle = rec.communicationStyle
+    ? t.care.aiEngine.communicationStyles[rec.communicationStyle] ?? rec.communicationStyle
+    : null;
+  const localizedEffort = rec.effortLevel
+    ? t.care.aiEngine.effortLevels[rec.effortLevel] ?? rec.effortLevel
+    : null;
+  const hasDateLink =
+    detail.returnTo === 'plan_ahead' &&
+    (Boolean(rec.suggestedDatePlanId) || rec.category === 'Quality Time' || Boolean(onPlanDate));
+  const [editingMsg, setEditingMsg] = useState(false);
+
+  const productPreview = useMemo(() => {
+    if (!isPurchase) return null;
+    const item = matchProductForRecommendation(rec);
+    const src = getProductImageSrc(item.imageKey);
+    return { item, src };
+  }, [isPurchase, rec]);
+
+  return (
+    <div className="space-y-4 pb-4">
+      <SubpageHeader
+        title={t.ia.care.detailPageTitle}
+        subtitle={formatTemplate(t.care.forRecipient, { name: recipientName })}
+        backLabel={t.ia.back}
+        onBack={onBack}
+      />
+
+      {/* Primary Header Card */}
+      <div className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] ring-1 ring-[#292832]/[0.04] space-y-3">
+        <div className="flex items-start gap-3">
+          <AiCategoryBadge category={rec.category} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-0.5">
+              <span className="text-[10.5px] font-semibold text-[#706794]">
+                {localizedCategory}
+              </span>
+              <span className="text-[10px] font-medium text-[#85838D] bg-[#F4EFEA] px-2 py-0.5 rounded-lg">
+                {t.care.aiEngine.confidenceLabel} {localizedConfidence}
+              </span>
+            </div>
+            <h2 className="font-display text-[17px] font-semibold text-[#292832] leading-snug">
+              {rec.title}
+            </h2>
+            {(localizedStyle || localizedEffort || isPurchase) && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                {isPurchase && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#B45A4C] bg-[#F5E8E7] px-2 py-0.5 rounded-lg">
+                    <ShoppingBag className="w-2.5 h-2.5" />
+                    <span>{t.deliveryCare.purchaseBadge}</span>
+                  </span>
+                )}
+                {localizedStyle && (
+                  <span className="text-[10px] font-medium text-[#5B527E] bg-[#EFEDF5]/75 px-2 py-0.5 rounded-lg">
+                    {localizedStyle}
+                  </span>
+                )}
+                {localizedEffort && (
+                  <span className="text-[10px] font-medium text-[#85838D] bg-[#FDFBFA] border border-[#292832]/[0.06] px-2 py-0.5 rounded-lg">
+                    {localizedEffort}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {productPreview && productPreview.src && (
+          <div className="flex items-center gap-3 rounded-2xl bg-[#FDFBFA] border border-[#292832]/[0.06] p-2.5">
+            <img
+              src={productPreview.src}
+              alt={productPreview.item.title[language]}
+              referrerPolicy="no-referrer"
+              className="w-12 h-12 rounded-xl object-cover shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-[12px] font-semibold text-[#292832] truncate">
+                {productPreview.item.title[language]}
+              </div>
+              <div className="text-[10.5px] text-[#85838D] truncate">
+                {productPreview.item.merchantName[language]} · {productPreview.item.currencySymbol}
+                {productPreview.item.unitPrice}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Reasoning & Action */}
+      <div className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#706794]">
+          {t.ia.care.detailReasoningTitle}
+        </div>
+        <p className="text-[12.5px] text-[#292832] leading-relaxed">{rec.action}</p>
+        <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.05] text-[12px] text-[#292832]/85 leading-relaxed">
+          <span className="font-semibold text-[#292832]">{t.care.aiEngine.whyLabel} </span>
+          {rec.why}
+        </div>
+      </div>
+
+      {/* Context & Expandable Evidence */}
+      <div className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#706794]">
+          {t.ia.care.detailContextTitle}
+        </div>
+        <div className="space-y-1.5 text-[12px]">
+          <div className="flex items-center gap-1.5 text-[#292832]">
+            <Clock className="w-3.5 h-3.5 text-[#85838D] shrink-0" strokeWidth={1.9} />
+            <span>
+              <span className="font-medium text-[#85838D]">{t.care.aiEngine.whenLabel} </span>
+              {rec.suggestedTiming}
+            </span>
+          </div>
+          <p className="text-[#706794] leading-snug">
+            <span className="font-semibold">{t.care.aiEngine.personalizationLabel} </span>
+            {rec.personalizationReason}
+          </p>
+        </div>
+
+        <ExpandableEvidencePanel
+          t={t}
+          accentTone={detail.returnTo === 'plan_ahead' ? 'cool' : 'warm'}
+          evidenceSummary={rec.evidenceSummary ?? rec.personalizationReason}
+          evidenceDetails={
+            rec.evidenceDetails && rec.evidenceDetails.length > 0
+              ? rec.evidenceDetails
+              : [t.care.stage58.careForNow.observedDataTag]
+          }
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#706794]">
+          {t.ia.care.detailActionsTitle}
+        </div>
+
+        {isPurchase ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={onOrderNow}
+              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12.5px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_8px_18px_-6px_rgba(232,140,125,0.55)] transition-all duration-200 active:scale-[0.98]"
+            >
+              <ShoppingBag className="w-4 h-4 shrink-0" strokeWidth={2} />
+              <span>{t.deliveryCare.orderNowBtn}</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onRemindLater}
+                className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
+              >
+                <Bell className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                <span className="truncate">{t.deliveryCare.remindLaterBtn}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onNotNow}
+                className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
+              >
+                <EyeOff className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                <span className="truncate">{t.deliveryCare.notNowBtn}</span>
+              </button>
+            </div>
+
+            <div className="pt-1 border-t border-[#292832]/[0.05] flex justify-end">
+              <button
+                type="button"
+                onClick={onSave}
+                aria-pressed={isSaved}
+                className={`min-h-[34px] px-3 py-1 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all active:scale-95 ${
+                  isSaved
+                    ? 'bg-[#EFEDF5] text-[#5B527E]'
+                    : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
+                }`}
+              >
+                {isSaved ? (
+                  <Check className="w-3 h-3 shrink-0" strokeWidth={2.2} />
+                ) : (
+                  <Bookmark className="w-3 h-3 shrink-0" strokeWidth={2} />
+                )}
+                <span>{isSaved ? t.care.saved : t.care.saveSuggestion}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            <div>
+              <button
+                type="button"
+                onClick={() => setEditingMsg((prev) => !prev)}
+                className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#706794] hover:underline active:scale-95 transition-transform"
+              >
+                <Pencil className="w-3 h-3" />
+                <span>{editingMsg ? t.care.hideMessageEditor : t.care.editMessage}</span>
+              </button>
+
+              {editingMsg ? (
+                <div className="mt-2">
+                  <label
+                    htmlFor={`detail-msg-${idPrefix}-${rec.id}`}
+                    className="block text-[11px] font-medium text-[#85838D] mb-1"
+                  >
+                    {formatTemplate(t.care.customMessageLabel, { name: recipientName })}
+                  </label>
+                  <textarea
+                    id={`detail-msg-${idPrefix}-${rec.id}`}
+                    rows={3}
+                    value={draftMessage}
+                    onChange={(e) => onChangeDraft(e.target.value)}
+                    className="w-full rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 p-2.5 text-[12px] text-[#292832] focus:outline-none focus:ring-2 focus:ring-[#E88C7D]"
+                  />
+                </div>
+              ) : (
+                <div className="mt-2 rounded-2xl bg-[#FDFBFA] border border-[#292832]/[0.05] p-3 text-[12px] text-[#292832]/85 italic leading-relaxed">
+                  “{draftMessage}”
+                </div>
+              )}
+            </div>
+
+            {hasDateLink && onPlanDate ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={onPlanDate}
+                  className="min-h-[44px] px-3 py-2 rounded-2xl bg-[#5B527E] hover:bg-[#494168] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                >
+                  <Calendar className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{t.care.stage58.planAhead.planDateBtn}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = draftMessage.trim();
+                    onSendCare(
+                      trimmed && trimmed !== rec.defaultMessage.trim() ? trimmed : undefined
+                    );
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_-6px_rgba(232,140,125,0.55)] transition-all active:scale-95"
+                >
+                  <Send className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{t.care.sendCare}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = draftMessage.trim();
+                    onSendCare(
+                      trimmed && trimmed !== rec.defaultMessage.trim() ? trimmed : undefined
+                    );
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_-6px_rgba(232,140,125,0.55)] transition-all active:scale-95"
+                >
+                  <Send className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{t.care.sendCare}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onSave}
+                  aria-pressed={isSaved}
+                  className={`min-h-[44px] px-3 py-2 rounded-2xl text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                    isSaved
+                      ? 'bg-[#EFEDF5] text-[#5B527E] ring-1 ring-[#9B93B8]/40'
+                      : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
+                  }`}
+                >
+                  {isSaved ? (
+                    <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                  ) : (
+                    <Bookmark className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                  )}
+                  <span className="truncate">
+                    {isSaved ? t.care.saved : t.care.saveSuggestion}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={surpriseDisabled}
+                onClick={onSendAsSurprise}
+                title={surpriseDisabled ? t.surpriseCare.normalUnpairedHint : undefined}
+                className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] disabled:opacity-50 text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+              >
+                <Gift className="w-3.5 h-3.5 shrink-0 text-[#C45E4E]" strokeWidth={2} />
+                <span className="truncate">{t.surpriseCare.sendAsSurpriseBtn}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onRemindLater}
+                className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#F4EFEA] hover:bg-[#EAE3DC] text-[#292832] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+              >
+                <Bell className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                <span className="truncate">{t.deliveryCare.remindLaterBtn}</span>
+              </button>
+            </div>
+
+            {hasDateLink && (
+              <button
+                type="button"
+                onClick={onSave}
+                aria-pressed={isSaved}
+                className={`w-full min-h-[38px] px-3 py-1.5 rounded-2xl text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                  isSaved
+                    ? 'bg-[#EFEDF5] text-[#5B527E] ring-1 ring-[#9B93B8]/40'
+                    : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
+                }`}
+              >
+                {isSaved ? (
+                  <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                ) : (
+                  <Bookmark className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                )}
+                <span>{isSaved ? t.care.saved : t.care.saveSuggestion}</span>
+              </button>
+            )}
+
+            <div className="pt-2 border-t border-[#292832]/[0.05] flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={onSkip}
+                className="min-h-[34px] px-3 py-1 rounded-xl bg-[#FDFBFA] hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[11px] font-medium inline-flex items-center gap-1.5 transition-all active:scale-95"
+              >
+                <SkipForward className="w-3 h-3 shrink-0" strokeWidth={2} />
+                <span>{t.care.skipBtn}</span>
+              </button>
+
+              {onDismissAi && (
+                <button
+                  type="button"
+                  onClick={onDismissAi}
+                  className="min-h-[34px] px-3 py-1 rounded-xl bg-[#FDFBFA] hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[11px] font-medium inline-flex items-center gap-1.5 transition-all active:scale-95"
+                >
+                  <EyeOff className="w-3 h-3 shrink-0" strokeWidth={2} />
+                  <span>{t.care.aiEngine.dismissBtn}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NormalCareContent() {
   const {
-    language,
     normalUser,
     normalPairing,
     normalPreferences,
     normalBaseline,
     normalInteractions,
-    normalLearnedProfile,
+    normalCareSubView,
+    setNormalCareSubView,
     saveNormalSuggestion,
     saveNormalAiSuggestion,
     sendNormalCare,
     sendNormalAiCare,
     trackNormalSkippedSuggestion,
     recordNormalRecentSuggestions,
+    normalLearnedProfile,
     setNormalActivePage,
+    membership,
     normalAiCareUsageCount,
     incrementNormalAiCareUsage,
     openNormalPremiumMembership,
@@ -1204,34 +1827,14 @@ function NormalCareContent() {
     advanceNormalMockOrderStatus,
     cancelNormalMockOrder,
     t,
+    language,
   } = useDualCharge();
 
-  const [subTab, setSubTab] = useState<'suggestions' | 'date_planning'>('suggestions');
-  const [selectedDateCat, setSelectedDateCat] = useState<DatePlanCategory | 'all'>('all');
+  const [detailSelection, setDetailSelection] = useState<CareDetailSelection | null>(null);
+  const [selectedDateCat] = useState<DatePlanCategory | 'all'>('all');
   const [normalDateReactions, setNormalDateReactions] = useState<
     Record<string, 'like' | 'skip' | undefined>
   >({});
-
-  const suggestions = selectNormalCareSuggestions(
-    normalPreferences.preferredCare,
-    normalPreferences.avoidTags
-  );
-  const partnerDisplayName = t.normalMode.partnerDisplayName;
-  const isPaired = normalPairing.status === 'paired_simulated';
-  const isBuilding = normalBaseline.phase === 'building';
-  const normalCapabilities = getMembershipCapabilities(
-    {
-      tier: 'free',
-      plan: 'monthly',
-      startDateISO: null,
-      purchasedBy: null,
-      isSimulated: true,
-    },
-    isPaired
-  );
-  const canGenerateNormalAi = normalCapabilities.canGenerateAiCare(normalAiCareUsageCount);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [customDrafts, setCustomDrafts] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{
     kind: 'sent' | 'saved' | 'feedback';
@@ -1253,17 +1856,16 @@ function NormalCareContent() {
   const [remindRec, setRemindRec] = useState<AiCareRecommendation | null>(null);
   const [reminderNowISO, setReminderNowISO] = useState<string>(() => new Date().toISOString());
 
+  const normalReminders = normalInteractions.careReminders ?? [];
   useEffect(() => {
-    const hasScheduled = (normalInteractions.careReminders ?? []).some(
-      (r) => r.status === 'scheduled'
-    );
+    const hasScheduled = normalReminders.some((r) => r.status === 'scheduled');
     if (!hasScheduled) return;
     setReminderNowISO(new Date().toISOString());
     const timer = window.setInterval(() => {
       setReminderNowISO(new Date().toISOString());
     }, 10000);
     return () => window.clearInterval(timer);
-  }, [normalInteractions.careReminders]);
+  }, [normalReminders]);
 
   useEffect(() => {
     if (!toast) return;
@@ -1271,23 +1873,22 @@ function NormalCareContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const { dueReminders: normalDueReminders, upcomingReminders: normalUpcomingReminders } = useMemo(
-    () => evaluateDueReminders(normalInteractions.careReminders ?? [], reminderNowISO),
-    [normalInteractions.careReminders, reminderNowISO]
+  const partnerDisplayName = t.normalMode.partnerDisplayName;
+  const isPaired = normalPairing.status === 'paired_simulated';
+  const isBuilding = normalBaseline.phase === 'building';
+  const normalCapabilities = getMembershipCapabilities(membership, false);
+  const canGenerateNormalAi = normalCapabilities.canGenerateAiCare(normalAiCareUsageCount);
+
+  const suggestions = selectNormalCareSuggestions(
+    normalPreferences.preferredCare,
+    normalPreferences.avoidTags
   );
-  const normalUpcomingReminderRecIds = useMemo(
-    () => normalUpcomingReminders.map((r) => r.recommendation.id),
-    [normalUpcomingReminders]
-  );
-  const normalCombinedDismissedIds = useMemo(
-    () => [
-      ...new Set([
-        ...dismissedAiIds,
-        ...(normalInteractions.dismissedRecommendationIds ?? []),
-      ]),
-    ],
-    [dismissedAiIds, normalInteractions.dismissedRecommendationIds]
-  );
+  const { dueReminders: normalDueReminders, upcomingReminders: normalUpcomingReminders } =
+    evaluateDueReminders(normalReminders, reminderNowISO);
+  const normalUpcomingReminderRecIds = normalUpcomingReminders.map((r) => r.recommendation.id);
+  const normalCombinedDismissedIds = [
+    ...new Set([...dismissedAiIds, ...(normalInteractions.dismissedRecommendationIds ?? [])]),
+  ];
 
   const normalSuggestionTitleLookup = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1331,6 +1932,22 @@ function NormalCareContent() {
     [normalStarterActivities, t.care.datePlanning.plans]
   );
 
+  const normalPresetToAiRec = (suggestion: NormalCareSuggestion): AiCareRecommendation | null => {
+    const localized = t.normalMode.careSuggestions[suggestion.id];
+    if (!localized) return null;
+    const draftMsg = customDrafts[suggestion.id] ?? localized.defaultMessage;
+    return presetToAiRecommendation({
+      id: suggestion.id,
+      title: localized.title,
+      description: localized.description,
+      reason: localized.reason,
+      timing: localized.timing,
+      defaultMessage: draftMsg,
+      evidenceSummary: localized.reason,
+      evidenceDetails: [t.care.stage58.careForNow.observedDataTag],
+    });
+  };
+
   const openNormalSurpriseFromAi = (rec: AiCareRecommendation) => {
     if (!isPaired) return;
     setEditingSurprise(null);
@@ -1338,23 +1955,17 @@ function NormalCareContent() {
     setSurpriseModalOpen(true);
   };
 
-  const openNormalSurpriseFromPreset = (suggestion: NormalCareSuggestion) => {
+  const openNormalSurpriseFromFirstAvailable = () => {
     if (!isPaired) return;
-    const localized = t.normalMode.careSuggestions[suggestion.id];
-    if (!localized) return;
-    const draftMsg = customDrafts[suggestion.id] ?? localized.defaultMessage;
-    setEditingSurprise(null);
-    setSurpriseSourceRec(
-      presetToAiRecommendation({
-        id: suggestion.id,
-        title: localized.title,
-        description: localized.description,
-        reason: localized.reason,
-        timing: localized.timing,
-        defaultMessage: draftMsg,
-      })
-    );
-    setSurpriseModalOpen(true);
+    const aiRec = aiResult?.data.recommendations[0];
+    if (aiRec) {
+      openNormalSurpriseFromAi(aiRec);
+      return;
+    }
+    const firstPreset = suggestions[0] ? normalPresetToAiRec(suggestions[0]) : null;
+    if (firstPreset) {
+      openNormalSurpriseFromAi(firstPreset);
+    }
   };
 
   const handleConfirmNormalSurpriseCreate = (payload: SurpriseCareSubmitPayload) => {
@@ -1401,16 +2012,8 @@ function NormalCareContent() {
     }
   };
 
-  const handleSendCare = (suggestion: NormalCareSuggestion) => {
-    const defaultMsg = t.normalMode.careSuggestions[suggestion.id]?.defaultMessage ?? '';
-    const rawDraft = customDrafts[suggestion.id];
-    const customMsg =
-      rawDraft !== undefined && rawDraft.trim() !== '' && rawDraft.trim() !== defaultMsg.trim()
-        ? rawDraft
-        : undefined;
-
+  const handleSendCare = (suggestion: NormalCareSuggestion, customMsg?: string) => {
     sendNormalCare(suggestion, customMsg);
-    setEditingId(null);
     setToast({
       kind: 'sent',
       title: formatTemplate(t.care.sentToastTitle, { name: partnerDisplayName }),
@@ -1527,51 +2130,339 @@ function NormalCareContent() {
     });
   };
 
-  const toggleCustomize = (suggestion: NormalCareSuggestion) => {
-    if (editingId === suggestion.id) {
-      setEditingId(null);
-      setCustomDrafts((prev) => {
-        const next = { ...prev };
-        delete next[suggestion.id];
-        return next;
-      });
-      return;
-    }
-    setEditingId(suggestion.id);
-    if (customDrafts[suggestion.id] === undefined) {
-      setCustomDrafts((prev) => ({
-        ...prev,
-        [suggestion.id]: t.normalMode.careSuggestions[suggestion.id]?.defaultMessage ?? '',
-      }));
-    }
+  const openDetailForAi = (
+    rec: AiCareRecommendation,
+    returnTo: 'now' | 'plan_ahead',
+    sourceKind: 'gemini' | 'fallback' | 'baseline'
+  ) => {
+    setDetailSelection({
+      recommendation: rec,
+      returnTo,
+      kind: 'ai',
+      sourceKind,
+    });
+    setNormalCareSubView('detail');
   };
+
+  const openDetailForPreset = (suggestion: NormalCareSuggestion) => {
+    const rec = normalPresetToAiRec(suggestion);
+    if (!rec) return;
+    setDetailSelection({
+      recommendation: rec,
+      returnTo: 'now',
+      kind: 'preset',
+      sourceKind: 'preset',
+      presetId: suggestion.id,
+      normalSuggestion: suggestion,
+    });
+    setNormalCareSubView('detail');
+  };
+
+  const activeOrdersCount = (normalInteractions.mockOrders ?? []).filter(
+    (o) => o.status !== 'Cancelled'
+  ).length;
+  const activePreparedCount = (normalInteractions.surpriseCareRecords ?? []).filter(
+    (r) => r.status !== 'Cancelled' && !r.orderId
+  ).length;
+  const surpriseActiveTotal = activeOrdersCount + activePreparedCount;
+
+  const toastBanner = toast && (
+    <div
+      role="status"
+      aria-live="polite"
+      className="sticky top-0 z-30 rounded-2xl bg-[#292832]/92 backdrop-blur-[10px] text-white px-3.5 py-2.5 shadow-[0_12px_28px_-8px_rgba(41,40,50,0.35)] flex items-center justify-between gap-2 text-[12px]"
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        <Check className="w-4 h-4 text-[#8FA89B] shrink-0" strokeWidth={2.3} />
+        <span className="truncate font-medium">{toast.title}</span>
+      </span>
+      {toast.showViewLink && (
+        <button
+          type="button"
+          onClick={() => {
+            setToast(null);
+            setNormalActivePage('notifications');
+          }}
+          className="text-[#E88C7D] font-semibold underline shrink-0 whitespace-nowrap active:scale-95 transition-transform"
+        >
+          {t.care.viewNotifications}
+        </button>
+      )}
+    </div>
+  );
+
+  const visiblePresetSuggestions = suggestions.filter(
+    (s) =>
+      !(normalInteractions.skippedSuggestionIds ?? []).includes(s.id) &&
+      !(normalInteractions.dismissedRecommendationIds ?? []).includes(s.id) &&
+      !normalUpcomingReminderRecIds.includes(s.id)
+  );
+
+  const renderModals = () => (
+    <>
+      <SurpriseCareModal
+        open={surpriseModalOpen}
+        onClose={() => {
+          setSurpriseModalOpen(false);
+          setEditingSurprise(null);
+        }}
+        t={t}
+        recipientName={partnerDisplayName}
+        sourceRecommendation={surpriseSourceRec}
+        editingRecord={editingSurprise}
+        datePlanOptions={normalDatePlanOptions}
+        isDemoMode={false}
+        onConfirmCreate={handleConfirmNormalSurpriseCreate}
+        onConfirmEdit={(id, patch) => {
+          updateNormalSurpriseCare(id, patch);
+          setToast({ kind: 'saved', title: t.surpriseCare.updatedToast });
+        }}
+      />
+
+      <MockDeliveryPlatformModal
+        open={deliveryModalOpen}
+        recommendation={deliveryRec}
+        recipientId="normal_partner"
+        recipientName={partnerDisplayName}
+        language={language}
+        t={t}
+        reminderId={activeReminderId}
+        isDemoMode={false}
+        onClose={() => {
+          setDeliveryModalOpen(false);
+          setDeliveryRec(null);
+          setActiveReminderId(undefined);
+        }}
+        onCompleteOrderFlow={handleCompleteNormalOrderFlow}
+      />
+
+      <RemindLaterSheet
+        open={remindSheetOpen}
+        recommendationTitle={remindRec?.title ?? ''}
+        t={t}
+        onClose={() => {
+          setRemindSheetOpen(false);
+          setRemindRec(null);
+        }}
+        onConfirm={handleConfirmNormalReminder}
+      />
+    </>
+  );
+
+  if (normalCareSubView === 'detail' && detailSelection) {
+    const rec = detailSelection.recommendation;
+    const isSaved =
+      detailSelection.kind === 'preset' && detailSelection.normalSuggestion
+        ? normalInteractions.savedSuggestionIds.includes(detailSelection.normalSuggestion.id)
+        : normalInteractions.savedAiSuggestions.some(
+            (item) =>
+              item.id === rec.id ||
+              (Boolean(item.metadata?.fingerprint && rec.fingerprint) &&
+                item.metadata?.fingerprint === rec.fingerprint) ||
+              item.title.toLowerCase() === rec.title.toLowerCase()
+          );
+    const draftMsg = customDrafts[rec.id] ?? rec.defaultMessage;
+
+    return (
+      <div className="space-y-4 pb-2 relative">
+        {toastBanner}
+        <RecommendationDetailView
+          detail={detailSelection}
+          idPrefix="normal"
+          recipientName={partnerDisplayName}
+          t={t}
+          language={language}
+          draftMessage={draftMsg}
+          onChangeDraft={(msg) => setCustomDrafts((prev) => ({ ...prev, [rec.id]: msg }))}
+          isSaved={isSaved}
+          surpriseDisabled={!isPaired}
+          onBack={() => setNormalCareSubView(detailSelection.returnTo)}
+          onSendCare={(customMsg) => {
+            if (detailSelection.kind === 'preset' && detailSelection.normalSuggestion) {
+              handleSendCare(detailSelection.normalSuggestion, customMsg);
+            } else {
+              handleSendAiCare(rec, customMsg);
+            }
+          }}
+          onSave={() => {
+            if (detailSelection.kind === 'preset' && detailSelection.normalSuggestion) {
+              handleSaveSuggestion(detailSelection.normalSuggestion);
+            } else {
+              handleSaveAiSuggestion(
+                rec,
+                detailSelection.sourceKind === 'gemini' ? 'gemini' : 'fallback'
+              );
+            }
+          }}
+          onSendAsSurprise={() => {
+            const payloadRec =
+              draftMsg.trim() && draftMsg.trim() !== rec.defaultMessage.trim()
+                ? { ...rec, defaultMessage: draftMsg.trim() }
+                : rec;
+            openNormalSurpriseFromAi(payloadRec);
+          }}
+          onOrderNow={() => openNormalOrderNow(rec)}
+          onRemindLater={() => openNormalRemindLater(rec)}
+          onNotNow={() => {
+            handleNotNowNormal(rec);
+            setNormalCareSubView(detailSelection.returnTo);
+          }}
+          onSkip={() => {
+            handleSkipAi(rec);
+            setNormalCareSubView(detailSelection.returnTo);
+          }}
+          onDismissAi={
+            detailSelection.kind === 'ai'
+              ? () => {
+                  handleDismissAi(rec);
+                  setNormalCareSubView(detailSelection.returnTo);
+                }
+              : undefined
+          }
+          onPlanDate={() => {
+            setNormalCareSubView('date_planning');
+          }}
+        />
+        {renderModals()}
+      </div>
+    );
+  }
+
+  if (normalCareSubView === 'surprise') {
+    return (
+      <div className="space-y-4 pb-2 relative">
+        {toastBanner}
+        <SubpageHeader
+          title={t.ia.care.surprisePageTitle}
+          subtitle={formatTemplate(t.care.forRecipient, { name: partnerDisplayName })}
+          backLabel={t.ia.back}
+          onBack={() => setNormalCareSubView('now')}
+        />
+
+        <div className="bg-gradient-to-br from-[#FBF7F5] via-white to-[#F4F1F9] rounded-[22px] p-4 ring-1 ring-[#9B93B8]/25 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.06)] space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#F5E8E7] flex items-center justify-center shrink-0">
+              <Gift className="w-5 h-5 text-[#C45E4E]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-[15px] font-semibold text-[#292832]">
+                {t.ia.care.surpriseCardTitle}
+              </h2>
+              <p className="text-[11.5px] text-[#85838D] mt-0.5 leading-snug">
+                {t.ia.care.surpriseCardDesc}
+              </p>
+            </div>
+          </div>
+
+          {!isPaired && (
+            <div className="rounded-xl bg-[#EFEDF5]/75 px-3 py-2 text-[11px] text-[#5B527E] flex items-center justify-between gap-2">
+              <span className="leading-snug">{t.surpriseCare.normalUnpairedHint}</span>
+              <button
+                type="button"
+                onClick={() => setNormalActivePage('profile')}
+                className="font-semibold underline shrink-0"
+              >
+                {t.normalMode.invitePartnerCta}
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={!isPaired || suggestions.length === 0}
+            onClick={openNormalSurpriseFromFirstAvailable}
+            className="w-full min-h-[42px] px-4 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] disabled:opacity-50 text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_8px_18px_-6px_rgba(232,140,125,0.5)] transition-all active:scale-95"
+          >
+            <Gift className="w-4 h-4 shrink-0" />
+            <span>{t.ia.care.surpriseCreateBtn}</span>
+          </button>
+        </div>
+
+        <DueRemindersSection
+          dueReminders={normalDueReminders}
+          t={t}
+          onOrderNow={(rem) => openNormalOrderNow(rem.recommendation, rem.id)}
+          onReschedule={(rem) => openNormalRemindLater(rem.recommendation)}
+          onDismiss={(remId) => dismissNormalCareReminder(remId)}
+        />
+
+        <SenderOrdersTrackingSection
+          orders={normalInteractions.mockOrders ?? []}
+          t={t}
+          onAdvanceStage={(orderId, nextStatus) => {
+            advanceNormalMockOrderStatus(orderId, nextStatus);
+            setToast({
+              kind: nextStatus === 'Delivered' ? 'sent' : 'feedback',
+              title: formatTemplate(
+                nextStatus === 'Delivered'
+                  ? t.deliveryCare.tracking.deliveredSurpriseToast
+                  : t.deliveryCare.tracking.stageUpdatedToast,
+                { stage: t.deliveryCare.tracking.stages[nextStatus] }
+              ),
+              showViewLink: nextStatus === 'Delivered',
+            });
+          }}
+          onCancelOrder={(orderId) => {
+            cancelNormalMockOrder(orderId);
+            setToast({
+              kind: 'feedback',
+              title: t.deliveryCare.tracking.cancelledToast,
+            });
+          }}
+        />
+
+        <PreparedSurprisesSection
+          records={normalInteractions.surpriseCareRecords ?? []}
+          recipientName={partnerDisplayName}
+          t={t}
+          subtitle={t.surpriseCare.normalPreparedSubtitle}
+          onEdit={(rec) => {
+            setSurpriseSourceRec(null);
+            setEditingSurprise(rec);
+            setSurpriseModalOpen(true);
+          }}
+          onCancel={(id) => {
+            cancelNormalSurpriseCare(id);
+            setToast({ kind: 'feedback', title: t.surpriseCare.cancelledToast });
+          }}
+        />
+
+        {normalDueReminders.length === 0 &&
+          activeOrdersCount === 0 &&
+          activePreparedCount === 0 && (
+            <div className="bg-white/90 rounded-[22px] p-5 text-center space-y-1.5 border border-[#E9E4DB]">
+              <p className="text-[12.5px] font-semibold text-[#292832]">
+                {t.surpriseCare.preparedSectionTitle} (0)
+              </p>
+              <p className="text-[11.5px] text-[#85838D] leading-snug">
+                {t.surpriseCare.normalPreparedSubtitle}
+              </p>
+            </div>
+          )}
+
+        <ExpandableAccordion
+          title={t.ia.care.surprisePrivacyTitle}
+          icon={<ShieldCheck className="w-4 h-4 text-[#706794]" />}
+        >
+          <div className="space-y-1.5">
+            <p>{t.deliveryCare.recipient.maskedProgressHint}</p>
+            <p>{t.deliveryCare.tracking.noAutoCompleteHint}</p>
+          </div>
+        </ExpandableAccordion>
+
+        {renderModals()}
+      </div>
+    );
+  }
+
+  const activeScenarioTab: 'now' | 'plan_ahead' | 'date_planning' =
+    normalCareSubView === 'plan_ahead' || normalCareSubView === 'date_planning'
+      ? normalCareSubView
+      : 'now';
 
   return (
     <div className="space-y-4 pb-2 relative">
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="sticky top-0 z-30 rounded-2xl bg-[#292832]/92 backdrop-blur-[10px] text-white px-3.5 py-2.5 shadow-[0_12px_28px_-8px_rgba(41,40,50,0.35)] flex items-center justify-between gap-2 text-[12px]"
-        >
-          <span className="flex items-center gap-2 min-w-0">
-            <Check className="w-4 h-4 text-[#8FA89B] shrink-0" strokeWidth={2.3} />
-            <span className="truncate font-medium">{toast.title}</span>
-          </span>
-          {toast.showViewLink && (
-            <button
-              type="button"
-              onClick={() => {
-                setToast(null);
-                setNormalActivePage('notifications');
-              }}
-              className="text-[#E88C7D] font-semibold underline shrink-0 whitespace-nowrap active:scale-95 transition-transform"
-            >
-              {t.care.viewNotifications}
-            </button>
-          )}
-        </div>
-      )}
+      {toastBanner}
 
       <div>
         <div className="flex items-center justify-between gap-2">
@@ -1584,45 +2475,96 @@ function NormalCareContent() {
             })}
           </span>
         </div>
-        <p className="text-[12.5px] text-[#85838D] mt-0.5">{t.care.subtitle}</p>
+        <p className="text-[12.5px] text-[#85838D] mt-0.5">{t.ia.care.overviewSubtitle}</p>
       </div>
 
-      {/* Sub-navigation: Care Suggestions | Date Planning */}
+      {/* Scenario Switcher: Care for Now | Plan Ahead | Date Planning */}
       <div
         role="tablist"
         aria-label={t.care.title}
-        className="grid grid-cols-2 gap-1 p-1 bg-[#F4EFEA] rounded-2xl"
+        className="grid grid-cols-3 gap-1 p-1 bg-[#F4EFEA] rounded-2xl"
       >
         <button
           type="button"
           role="tab"
-          aria-selected={subTab === 'suggestions'}
-          onClick={() => setSubTab('suggestions')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 px-2 ${
-            subTab === 'suggestions'
+          aria-selected={activeScenarioTab === 'now'}
+          onClick={() => setNormalCareSubView('now')}
+          className={`min-h-[38px] rounded-xl text-[11.5px] font-semibold transition-all duration-200 active:scale-95 px-1.5 truncate ${
+            activeScenarioTab === 'now'
               ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
               : 'text-[#85838D] hover:text-[#292832]'
           }`}
         >
-          {t.care.tabSuggestions}
+          {t.ia.care.scenarios.now}
         </button>
         <button
           type="button"
           role="tab"
-          aria-selected={subTab === 'date_planning'}
-          onClick={() => setSubTab('date_planning')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 px-2 ${
-            subTab === 'date_planning'
+          aria-selected={activeScenarioTab === 'plan_ahead'}
+          onClick={() => setNormalCareSubView('plan_ahead')}
+          className={`min-h-[38px] rounded-xl text-[11.5px] font-semibold transition-all duration-200 active:scale-95 px-1.5 truncate ${
+            activeScenarioTab === 'plan_ahead'
               ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
               : 'text-[#85838D] hover:text-[#292832]'
           }`}
         >
-          <Calendar className="w-3.5 h-3.5 text-[#E88C7D]" />
-          <span>{t.care.tabDatePlanning}</span>
+          {t.ia.care.scenarios.planAhead}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeScenarioTab === 'date_planning'}
+          onClick={() => setNormalCareSubView('date_planning')}
+          className={`min-h-[38px] rounded-xl text-[11.5px] font-semibold transition-all duration-200 active:scale-95 flex items-center justify-center gap-1 px-1.5 truncate ${
+            activeScenarioTab === 'date_planning'
+              ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
+              : 'text-[#85838D] hover:text-[#292832]'
+          }`}
+        >
+          <Calendar className="w-3 h-3 text-[#E88C7D] shrink-0" />
+          <span className="truncate">{t.ia.care.scenarios.datePlanning}</span>
         </button>
       </div>
 
-      {subTab === 'date_planning' ? (
+      {/* Surprise Care Entry Card */}
+      <button
+        type="button"
+        onClick={() => setNormalCareSubView('surprise')}
+        className="w-full text-left bg-gradient-to-r from-[#FBF7F5] via-white to-[#F4F1F9] rounded-[22px] p-3.5 ring-1 ring-[#E88C7D]/30 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.06)] hover:ring-[#E88C7D]/60 transition-all active:scale-[0.985] flex items-center justify-between gap-3"
+      >
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-[#F5E8E7] flex items-center justify-center shrink-0">
+            <Gift className="w-5 h-5 text-[#C45E4E]" strokeWidth={1.9} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-display text-[14px] font-semibold text-[#292832]">
+                {t.ia.care.surpriseCardTitle}
+              </span>
+              {normalDueReminders.length > 0 && (
+                <span className="rounded-lg bg-[#FBF2E6] px-2 py-0.5 text-[10px] font-semibold text-[#6E4F28] tabular-nums">
+                  {formatTemplate(t.ia.care.surpriseCardBadgeDue, {
+                    count: normalDueReminders.length,
+                  })}
+                </span>
+              )}
+              {surpriseActiveTotal > 0 && (
+                <span className="rounded-lg bg-[#EFEDF5] px-2 py-0.5 text-[10px] font-semibold text-[#5B527E] tabular-nums">
+                  {formatTemplate(t.ia.care.surpriseCardBadgeActive, {
+                    count: surpriseActiveTotal,
+                  })}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-[#85838D] leading-snug mt-0.5">
+              {t.ia.care.surpriseCardDesc}
+            </p>
+          </div>
+        </div>
+        <ChevronRight className="w-4 h-4 text-[#85838D] shrink-0" />
+      </button>
+
+      {activeScenarioTab === 'date_planning' ? (
         <div className="space-y-3">
           <div className="bg-white/85 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2">
             <h2 className="font-display text-[15px] font-semibold text-[#292832]">
@@ -1718,21 +2660,45 @@ function NormalCareContent() {
             upgradeLabel={t.care.membershipLock.upgradeCta}
             backLabel={t.care.membershipLock.backToSuggestions}
             onUpgrade={openNormalPremiumMembership}
-            onBack={() => setSubTab('suggestions')}
+            onBack={() => setNormalCareSubView('now')}
           />
         </div>
+      ) : activeScenarioTab === 'plan_ahead' ? (
+        <PlanAheadSection
+          t={t}
+          language={language}
+          recipientName={partnerDisplayName}
+          energyShared={normalUser.sharingConsent.energy}
+          sleepShared={false}
+          canShowFutureForecast={normalBaseline.canShowFutureForecast}
+          forecastDays={[]}
+          overallMean={null}
+          recent7DayMean={null}
+          recordedDaysCount={normalBaseline.recordedDaysCount}
+          pattern={null}
+          normalProgress={{
+            recordedDays: normalBaseline.recordedDaysCount,
+            maxWeeks: normalBaseline.weekdayPattern.maxDistinctWeeksObserved,
+          }}
+          recommendations={aiResult?.data.planAheadRecommendations ?? []}
+          planAheadSummary={aiResult?.data.planAheadSummary}
+          sourceKind={aiResult?.source ?? 'fallback'}
+          savedAiSuggestions={normalInteractions.savedAiSuggestions}
+          dismissedIds={normalCombinedDismissedIds}
+          hiddenByReminderIds={normalUpcomingReminderRecIds}
+          onOpenDetail={(rec, src) => openDetailForAi(rec, 'plan_ahead', src)}
+        />
       ) : (
         <>
-          {/* Cold-Start Context Card */}
           <section
             aria-label={t.normalMode.careColdStartTitle}
-            className="bg-white/85 backdrop-blur-[10px] ring-1 ring-white/80 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+            className="bg-white/85 backdrop-blur-[10px] ring-1 ring-white/80 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2"
           >
             <div className="flex items-start gap-2.5">
               <div className="w-9 h-9 rounded-2xl bg-[#EFEDF5] flex items-center justify-center shrink-0 mt-0.5">
                 <Sparkles className="w-4 h-4 text-[#706794]" strokeWidth={2} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <div className="text-[11px] font-semibold text-[#706794]">
                   {isBuilding
                     ? t.normalMode.careSourcePreferenceBadge
@@ -1741,7 +2707,7 @@ function NormalCareContent() {
                 <h2 className="font-display text-[14.5px] font-semibold text-[#292832] leading-snug">
                   {t.normalMode.careColdStartTitle}
                 </h2>
-                <p className="text-[12px] text-[#85838D] leading-relaxed">
+                <p className="text-[11.5px] text-[#85838D] leading-snug">
                   {t.normalMode.careColdStartBody}
                 </p>
               </div>
@@ -1764,12 +2730,7 @@ function NormalCareContent() {
 
           {!isPaired && (
             <div className="rounded-2xl bg-[#EFEDF5]/60 px-3.5 py-2.5 text-[11.5px] text-[#5B527E] flex items-center justify-between gap-2">
-              <div className="min-w-0 space-y-0.5">
-                <span className="block leading-snug">{t.normalMode.carePartnerNotPairedNote}</span>
-                <span className="block text-[10.5px] text-[#706794] leading-snug">
-                  {t.surpriseCare.normalUnpairedHint}
-                </span>
-              </div>
+              <span className="leading-snug">{t.normalMode.carePartnerNotPairedNote}</span>
               <button
                 type="button"
                 onClick={() => setNormalActivePage('profile')}
@@ -1780,15 +2741,12 @@ function NormalCareContent() {
             </div>
           )}
 
-          <DueRemindersSection
-            dueReminders={normalDueReminders}
+          <CareForNowHeader
             t={t}
-            onOrderNow={(rem) => openNormalOrderNow(rem.recommendation, rem.id)}
-            onReschedule={(rem) => openNormalRemindLater(rem.recommendation)}
-            onDismiss={(remId) => dismissNormalCareReminder(remId)}
+            energyShared={normalUser.sharingConsent.energy}
+            recipientName={partnerDisplayName}
           />
 
-          {/* Stage 5.3 / 5.4 / 5.5 Gemini Personalized Care Engine */}
           <AiCareEnginePanel
             idPrefix="normal"
             recipientName={partnerDisplayName}
@@ -1805,7 +2763,6 @@ function NormalCareContent() {
             aiUsageCount={normalAiCareUsageCount}
             aiMonthlyLimit={normalCapabilities.aiCareMonthlyLimit}
             canGenerateAi={canGenerateNormalAi}
-            surpriseDisabled={!isPaired}
             onUpgrade={openNormalPremiumMembership}
             onBackToPresets={() => {
               document.getElementById('normal-preset-care-section')?.scrollIntoView({
@@ -1814,62 +2771,13 @@ function NormalCareContent() {
               });
             }}
             onGenerate={handleGenerateAi}
-            onSendAiCare={handleSendAiCare}
-            onSendAsSurprise={openNormalSurpriseFromAi}
-            onSaveAiSuggestion={handleSaveAiSuggestion}
-            onDismiss={handleDismissAi}
-            onSkip={handleSkipAi}
-            onOrderNow={(rec) => openNormalOrderNow(rec)}
-            onRemindLater={openNormalRemindLater}
-            onNotNow={handleNotNowNormal}
+            onOpenDetail={(rec, src) => openDetailForAi(rec, 'now', src)}
           />
 
-          <SenderOrdersTrackingSection
-            orders={normalInteractions.mockOrders ?? []}
-            t={t}
-            onAdvanceStage={(orderId, nextStatus) => {
-              advanceNormalMockOrderStatus(orderId, nextStatus);
-              setToast({
-                kind: nextStatus === 'Delivered' ? 'sent' : 'feedback',
-                title: formatTemplate(
-                  nextStatus === 'Delivered'
-                    ? t.deliveryCare.tracking.deliveredSurpriseToast
-                    : t.deliveryCare.tracking.stageUpdatedToast,
-                  { stage: t.deliveryCare.tracking.stages[nextStatus] }
-                ),
-                showViewLink: nextStatus === 'Delivered',
-              });
-            }}
-            onCancelOrder={(orderId) => {
-              cancelNormalMockOrder(orderId);
-              setToast({
-                kind: 'feedback',
-                title: t.deliveryCare.tracking.cancelledToast,
-              });
-            }}
-          />
-
-          <PreparedSurprisesSection
-            records={normalInteractions.surpriseCareRecords ?? []}
-            recipientName={partnerDisplayName}
-            t={t}
-            subtitle={t.surpriseCare.normalPreparedSubtitle}
-            onEdit={(rec) => {
-              setSurpriseSourceRec(null);
-              setEditingSurprise(rec);
-              setSurpriseModalOpen(true);
-            }}
-            onCancel={(id) => {
-              cancelNormalSurpriseCare(id);
-              setToast({ kind: 'feedback', title: t.surpriseCare.cancelledToast });
-            }}
-          />
-
-          {/* Preference-Guided Baseline Suggestions */}
           <section
             id="normal-preset-care-section"
             aria-label={t.care.personalizedSuggestionsTitle}
-            className="space-y-3"
+            className="space-y-2.5"
           >
             <div className="flex items-center justify-between px-0.5">
               <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
@@ -1880,205 +2788,59 @@ function NormalCareContent() {
               </span>
             </div>
 
-            {suggestions
-              .filter(
-                (s) =>
-                  !(normalInteractions.skippedSuggestionIds ?? []).includes(s.id) &&
-                  !(normalInteractions.dismissedRecommendationIds ?? []).includes(s.id) &&
-                  !normalUpcomingReminderRecIds.includes(s.id)
-              )
-              .map((suggestion) => {
-                const localized = t.normalMode.careSuggestions[suggestion.id];
-                if (!localized) return null;
-                const isSaved = normalInteractions.savedSuggestionIds.includes(suggestion.id);
-                const isEditing = editingId === suggestion.id;
-                const draftValue = customDrafts[suggestion.id] ?? localized.defaultMessage;
-                const isNonPurchase = suggestion.category === 'message';
+            {visiblePresetSuggestions.map((suggestion) => {
+              const localized = t.normalMode.careSuggestions[suggestion.id];
+              if (!localized) return null;
+              const isSaved = normalInteractions.savedSuggestionIds.includes(suggestion.id);
+              const isNonPurchase = suggestion.category === 'message';
 
-                return (
-                  <article
-                    key={suggestion.id}
-                    className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <SuggestionIconBadge category={suggestion.category} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[10.5px] font-medium text-[#706794] mb-0.5">
-                          {isNonPurchase ? t.care.nonPurchaseTag : t.care.homeGestureTag} ·{' '}
-                          {t.normalMode.careSourcePreferenceBadge}
-                        </div>
-                        <h3 className="font-display text-[15px] font-semibold text-[#292832] leading-snug">
-                          {localized.title}
-                        </h3>
-                        <p className="text-[12.5px] text-[#292832]/85 mt-1 leading-relaxed">
-                          {localized.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-[#FDFBFA] rounded-2xl p-3 space-y-1.5 text-[11.5px] border border-[#292832]/[0.04]">
-                      <p className="text-[#292832]/85 leading-snug">
-                        <span className="font-semibold text-[#292832]">{t.care.whyThisFits} </span>
-                        {localized.reason}
-                      </p>
-                      <div className="flex items-center gap-1.5 text-[#85838D]">
-                        <Clock className="w-3.5 h-3.5 shrink-0" strokeWidth={1.9} />
-                        <span>
-                          {t.care.suggestedTiming} {localized.timing}
+              return (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  onClick={() => openDetailForPreset(suggestion)}
+                  className="w-full text-left bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] hover:ring-1 hover:ring-[#E88C7D]/45 transition-all active:scale-[0.985] space-y-2.5"
+                >
+                  <div className="flex items-start gap-3">
+                    <SuggestionIconBadge category={suggestion.category} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className="text-[10.5px] font-medium text-[#706794]">
+                          {isNonPurchase ? t.care.nonPurchaseTag : t.care.homeGestureTag}
                         </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => toggleCustomize(suggestion)}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium text-[#706794] hover:underline active:scale-95 transition-transform"
-                      >
-                        <Pencil className="w-3 h-3" />
-                        <span>{isEditing ? t.care.hideMessageEditor : t.care.editMessage}</span>
-                      </button>
-
-                      {isEditing && (
-                        <div className="mt-2">
-                          <label
-                            htmlFor={`care-msg-normal-${suggestion.id}`}
-                            className="block text-[11px] font-medium text-[#85838D] mb-1"
-                          >
-                            {formatTemplate(t.care.customMessageLabel, {
-                              name: partnerDisplayName,
-                            })}
-                          </label>
-                          <textarea
-                            id={`care-msg-normal-${suggestion.id}`}
-                            rows={2}
-                            value={draftValue}
-                            onChange={(e) =>
-                              setCustomDrafts((prev) => ({
-                                ...prev,
-                                [suggestion.id]: e.target.value,
-                              }))
-                            }
-                            className="w-full rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 p-2.5 text-[12px] text-[#292832] focus:outline-none focus:ring-2 focus:ring-[#E88C7D]"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => handleSendCare(suggestion)}
-                        className="min-h-[44px] px-3 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_-6px_rgba(232,140,125,0.55)] transition-all duration-200 active:scale-95"
-                      >
-                        <Send className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                        <span className="truncate">{t.care.sendCare}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSaveSuggestion(suggestion)}
-                        aria-pressed={isSaved}
-                        className={`min-h-[44px] px-3 py-2 rounded-2xl text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 ${
-                          isSaved
-                            ? 'bg-[#EFEDF5] text-[#5B527E] ring-1 ring-[#9B93B8]/40'
-                            : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
-                        }`}
-                      >
-                        {isSaved ? (
-                          <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
-                        ) : (
-                          <Bookmark className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
+                        {isSaved && (
+                          <span className="text-[10px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
+                            {t.care.saved}
+                          </span>
                         )}
-                        <span className="truncate">
-                          {isSaved ? t.care.saved : t.care.saveSuggestion}
-                        </span>
-                      </button>
+                      </div>
+                      <h3 className="font-display text-[15px] font-semibold text-[#292832] leading-snug">
+                        {localized.title}
+                      </h3>
+                      <p className="text-[12px] text-[#85838D] mt-1 leading-snug line-clamp-2">
+                        {localized.description}
+                      </p>
                     </div>
+                  </div>
 
-                    <button
-                      type="button"
-                      disabled={!isPaired}
-                      onClick={() => openNormalSurpriseFromPreset(suggestion)}
-                      title={!isPaired ? t.surpriseCare.normalUnpairedHint : undefined}
-                      className="w-full min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] disabled:opacity-50 text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-[0.98]"
-                    >
-                      <Gift className="w-3.5 h-3.5 shrink-0 text-[#C45E4E]" strokeWidth={2} />
-                      <span>{t.surpriseCare.sendAsSurpriseBtn}</span>
-                    </button>
-
-                    <div className="pt-1 border-t border-[#292832]/[0.05] flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          trackNormalSkippedSuggestion(suggestion.id);
-                          setToast({
-                            kind: 'feedback',
-                            title: formatTemplate(t.care.skippedToast, {
-                              title: localized.title,
-                              name: partnerDisplayName,
-                            }),
-                          });
-                        }}
-                        className="min-h-[32px] px-2.5 rounded-xl bg-[#FDFBFA] hover:bg-[#F4EFEA] text-[#85838D] text-[11px] font-medium inline-flex items-center gap-1 transition-all active:scale-95"
-                      >
-                        <SkipForward className="w-3 h-3" />
-                        <span>{t.care.skipBtn}</span>
-                      </button>
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#292832]/[0.05]">
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#85838D] min-w-0">
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{localized.timing}</span>
                     </div>
-                  </article>
-                );
-              })}
+                    <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#C45E4E] shrink-0">
+                      <span>{t.ia.care.detailOpenCta}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </section>
         </>
       )}
 
-      <SurpriseCareModal
-        open={surpriseModalOpen}
-        onClose={() => {
-          setSurpriseModalOpen(false);
-          setEditingSurprise(null);
-        }}
-        t={t}
-        recipientName={partnerDisplayName}
-        sourceRecommendation={surpriseSourceRec}
-        editingRecord={editingSurprise}
-        datePlanOptions={normalDatePlanOptions}
-        isDemoMode={false}
-        onConfirmCreate={handleConfirmNormalSurpriseCreate}
-        onConfirmEdit={(id, patch) => {
-          updateNormalSurpriseCare(id, patch);
-          setToast({ kind: 'saved', title: t.surpriseCare.updatedToast });
-        }}
-      />
-
-      <MockDeliveryPlatformModal
-        open={deliveryModalOpen}
-        recommendation={deliveryRec}
-        recipientId="normal_partner"
-        recipientName={partnerDisplayName}
-        language={language}
-        t={t}
-        reminderId={activeReminderId}
-        isDemoMode={false}
-        onClose={() => {
-          setDeliveryModalOpen(false);
-          setDeliveryRec(null);
-          setActiveReminderId(undefined);
-        }}
-        onCompleteOrderFlow={handleCompleteNormalOrderFlow}
-      />
-
-      <RemindLaterSheet
-        open={remindSheetOpen}
-        recommendationTitle={remindRec?.title ?? ''}
-        t={t}
-        onClose={() => {
-          setRemindSheetOpen(false);
-          setRemindRec(null);
-        }}
-        onConfirm={handleConfirmNormalReminder}
-      />
+      {renderModals()}
     </div>
   );
 }
@@ -2086,6 +2848,8 @@ function NormalCareContent() {
 function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
   const {
     presentationBundle,
+    careSubViews,
+    setCareSubView,
     savedSuggestionIds,
     savedAiSuggestions,
     aiFeedback,
@@ -2135,9 +2899,14 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
     language,
   } = useDualCharge();
 
-  const [subTab, setSubTab] = useState<'suggestions' | 'date_planning'>('suggestions');
+  const currentCareSubView: CareScenarioView = careSubViews[partnerId] ?? 'now';
+  const [detailByPartner, setDetailByPartner] = useState<
+    Record<PartnerId, CareDetailSelection | null>
+  >({
+    alex: null,
+    jamie: null,
+  });
   const [selectedDateCat, setSelectedDateCat] = useState<DatePlanCategory | 'all'>('all');
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [customDrafts, setCustomDrafts] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{
     kind: 'sent' | 'saved' | 'feedback';
@@ -2201,6 +2970,58 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
     }
     return map;
   }, [t.care.suggestions]);
+
+  const demoBaselineContext = useMemo(() => {
+    if (!presentationBundle) return null;
+    const recipient: PartnerId = partnerId === 'alex' ? 'jamie' : 'alex';
+    const sharedRecharge =
+      weeklyRecharge[recipient]?.shareWithPartner === true ? weeklyRecharge[recipient] : null;
+    return buildPresentationCareContext({
+      bundle: presentationBundle,
+      senderId: partnerId,
+      recipientId: recipient,
+      language,
+      sharingPrefs,
+      dailyCheckInStatus: dailyCheckIns[recipient]?.status ?? null,
+      partnerStatusUpdate: partnerStatusUpdates[recipient] ?? null,
+      recipientCareTags: carePreferences[recipient] ?? [],
+      presetTagLabels: t.profile.presetTags,
+      savedSuggestionIds: savedSuggestionIds[partnerId],
+      savedAiSuggestions: savedAiSuggestions[partnerId],
+      notifications,
+      careMoments,
+      recipientWeeklyRecharge: sharedRecharge,
+      skippedSuggestionIds: skippedSuggestionIds[partnerId] ?? [],
+      suggestionTitleLookup,
+      feedback: aiFeedback[partnerId],
+      recipientFeedbackEvents: feedbackEvents[recipient] ?? [],
+      recentSuggestionHistory: recentSuggestionHistory[recipient] ?? [],
+    });
+  }, [
+    presentationBundle,
+    partnerId,
+    language,
+    sharingPrefs,
+    dailyCheckIns,
+    partnerStatusUpdates,
+    carePreferences,
+    t.profile.presetTags,
+    savedSuggestionIds,
+    savedAiSuggestions,
+    notifications,
+    careMoments,
+    weeklyRecharge,
+    skippedSuggestionIds,
+    suggestionTitleLookup,
+    aiFeedback,
+    feedbackEvents,
+    recentSuggestionHistory,
+  ]);
+
+  const demoBaselinePlanAhead = useMemo(() => {
+    if (!demoBaselineContext) return null;
+    return generateLocalFallbackCare(demoBaselineContext, 'missing_api_key', undefined, 0).data;
+  }, [demoBaselineContext]);
 
   if (!presentationBundle) {
     return (
@@ -2324,6 +3145,16 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
     const localized = t.care.suggestions[suggestion.id];
     if (!localized) return null;
     const draftMsg = customDrafts[suggestion.id] ?? localized.defaultMessage;
+    const details = [
+      t.care.stage58.careForNow.observedDataTag,
+      ...(recipientSharing.energy
+        ? [
+            formatTemplate(t.care.stage58.careForNow.todayEnergyChip, {
+              score: recipientProfile.latestEnergy,
+            }),
+          ]
+        : []),
+    ];
     return presetToAiRecommendation({
       id: suggestion.id,
       title: localized.title,
@@ -2332,6 +3163,8 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
       timing: localized.timing,
       defaultMessage: draftMsg,
       requiresSpendingMoney: suggestion.requiresSpendingMoney,
+      evidenceSummary: localized.reason,
+      evidenceDetails: details,
     });
   };
 
@@ -2341,12 +3174,16 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
     setSurpriseModalOpen(true);
   };
 
-  const openDemoSurpriseFromPreset = (suggestion: CareSuggestion) => {
-    const rec = demoPresetToAiRec(suggestion);
-    if (!rec) return;
-    setEditingSurprise(null);
-    setSurpriseSourceRec(rec);
-    setSurpriseModalOpen(true);
+  const openDemoSurpriseFromFirstAvailable = () => {
+    const aiRec = aiResultByPartner[partnerId]?.data.recommendations[0];
+    if (aiRec) {
+      openDemoSurpriseFromAi(aiRec);
+      return;
+    }
+    const firstPreset = suggestions[0] ? demoPresetToAiRec(suggestions[0]) : null;
+    if (firstPreset) {
+      openDemoSurpriseFromAi(firstPreset);
+    }
   };
 
   const openDemoOrderNow = (rec: AiCareRecommendation, reminderId?: string) => {
@@ -2455,16 +3292,8 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
     }
   };
 
-  const handleSendCare = (suggestion: CareSuggestion) => {
-    const defaultMsg = t.care.suggestions[suggestion.id]?.defaultMessage ?? '';
-    const rawDraft = customDrafts[suggestion.id];
-    const customMsg =
-      rawDraft !== undefined && rawDraft.trim() !== '' && rawDraft.trim() !== defaultMsg.trim()
-        ? rawDraft
-        : undefined;
-
+  const handleSendCare = (suggestion: CareSuggestion, customMsg?: string) => {
     sendCareNotification(partnerId, suggestion, customMsg);
-    setEditingId(null);
     setToast({
       kind: 'sent',
       title: formatTemplate(t.care.sentToastTitle, { name: recipientMeta.display_name }),
@@ -2531,51 +3360,347 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
     });
   };
 
-  const toggleCustomize = (suggestion: CareSuggestion) => {
-    if (editingId === suggestion.id) {
-      setEditingId(null);
-      setCustomDrafts((prev) => {
-        const next = { ...prev };
-        delete next[suggestion.id];
-        return next;
-      });
-      return;
-    }
-    setEditingId(suggestion.id);
-    if (customDrafts[suggestion.id] === undefined) {
-      setCustomDrafts((prev) => ({
-        ...prev,
-        [suggestion.id]: t.care.suggestions[suggestion.id]?.defaultMessage ?? '',
-      }));
-    }
+  const openDetailForAi = (
+    rec: AiCareRecommendation,
+    returnTo: 'now' | 'plan_ahead',
+    sourceKind: 'gemini' | 'fallback' | 'baseline'
+  ) => {
+    setDetailByPartner((prev) => ({
+      ...prev,
+      [partnerId]: {
+        recommendation: rec,
+        returnTo,
+        kind: 'ai',
+        sourceKind,
+      },
+    }));
+    setCareSubView(partnerId, 'detail');
   };
+
+  const openDetailForPreset = (suggestion: CareSuggestion) => {
+    const rec = demoPresetToAiRec(suggestion);
+    if (!rec) return;
+    setDetailByPartner((prev) => ({
+      ...prev,
+      [partnerId]: {
+        recommendation: rec,
+        returnTo: 'now',
+        kind: 'preset',
+        sourceKind: 'preset',
+        presetId: suggestion.id,
+        demoSuggestion: suggestion,
+      },
+    }));
+    setCareSubView(partnerId, 'detail');
+  };
+
+  const activeOrdersCount = mySenderOrders.filter((o) => o.status !== 'Cancelled').length;
+  const activePreparedCount = myPreparedSurprises.filter(
+    (r) => r.status !== 'Cancelled' && !r.orderId
+  ).length;
+  const surpriseActiveTotal = activeOrdersCount + activePreparedCount;
+
+  const toastBanner = toast && (
+    <div
+      role="status"
+      aria-live="polite"
+      className="sticky top-0 z-30 rounded-2xl bg-[#292832]/92 backdrop-blur-[10px] text-white px-3.5 py-2.5 shadow-[0_12px_28px_-8px_rgba(41,40,50,0.35)] flex items-center justify-between gap-2 text-[12px]"
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        <Check className="w-4 h-4 text-[#8FA89B] shrink-0" strokeWidth={2.3} />
+        <span className="truncate font-medium">{toast.title}</span>
+      </span>
+      {toast.showViewLink && (
+        <button
+          type="button"
+          onClick={() => {
+            setToast(null);
+            setActivePage(partnerId, 'notifications');
+          }}
+          className="text-[#E88C7D] font-semibold underline shrink-0 whitespace-nowrap active:scale-95 transition-transform"
+        >
+          {t.care.viewNotifications}
+        </button>
+      )}
+    </div>
+  );
+
+  const renderModals = () => (
+    <>
+      <SurpriseCareModal
+        open={surpriseModalOpen}
+        onClose={() => {
+          setSurpriseModalOpen(false);
+          setEditingSurprise(null);
+        }}
+        t={t}
+        recipientName={recipientMeta.display_name}
+        sourceRecommendation={surpriseSourceRec}
+        editingRecord={editingSurprise}
+        datePlanOptions={datePlanOptionsForModal}
+        isDemoMode
+        onConfirmCreate={handleConfirmDemoSurpriseCreate}
+        onConfirmEdit={(id, patch) => {
+          updateSurpriseCare(partnerId, id, patch);
+          setToast({ kind: 'saved', title: t.surpriseCare.updatedToast });
+        }}
+      />
+
+      <MockDeliveryPlatformModal
+        open={deliveryModalOpen}
+        recommendation={deliveryRec}
+        recipientId={defaultRecipient}
+        recipientName={recipientMeta.display_name}
+        language={language}
+        t={t}
+        reminderId={activeReminderId}
+        isDemoMode
+        onClose={() => {
+          setDeliveryModalOpen(false);
+          setDeliveryRec(null);
+          setActiveReminderId(undefined);
+        }}
+        onCompleteOrderFlow={handleCompleteDemoOrderFlow}
+      />
+
+      <RemindLaterSheet
+        open={remindSheetOpen}
+        recommendationTitle={remindRec?.title ?? ''}
+        t={t}
+        onClose={() => {
+          setRemindSheetOpen(false);
+          setRemindRec(null);
+        }}
+        onConfirm={handleConfirmDemoReminder}
+      />
+    </>
+  );
+
+  const detailSelection = detailByPartner[partnerId];
+  if (currentCareSubView === 'detail' && detailSelection) {
+    const rec = detailSelection.recommendation;
+    const isSaved =
+      detailSelection.kind === 'preset' && detailSelection.demoSuggestion
+        ? mySavedIds.includes(detailSelection.demoSuggestion.id)
+        : mySavedAiSuggestions.some(
+            (item) =>
+              item.id === rec.id ||
+              (Boolean(item.metadata?.fingerprint && rec.fingerprint) &&
+                item.metadata?.fingerprint === rec.fingerprint) ||
+              item.title.toLowerCase() === rec.title.toLowerCase()
+          );
+    const draftKey = `${partnerId}:${rec.id}`;
+    const draftMsg = customDrafts[draftKey] ?? customDrafts[rec.id] ?? rec.defaultMessage;
+
+    return (
+      <div className="space-y-4 pb-2 relative">
+        {toastBanner}
+        <RecommendationDetailView
+          detail={detailSelection}
+          idPrefix={partnerId}
+          recipientName={recipientMeta.display_name}
+          t={t}
+          language={language}
+          draftMessage={draftMsg}
+          onChangeDraft={(msg) =>
+            setCustomDrafts((prev) => ({ ...prev, [draftKey]: msg, [rec.id]: msg }))
+          }
+          isSaved={isSaved}
+          onBack={() => setCareSubView(partnerId, detailSelection.returnTo)}
+          onSendCare={(customMsg) => {
+            if (detailSelection.kind === 'preset' && detailSelection.demoSuggestion) {
+              handleSendCare(detailSelection.demoSuggestion, customMsg);
+            } else {
+              handleSendAiCare(rec, customMsg);
+            }
+          }}
+          onSave={() => {
+            if (detailSelection.kind === 'preset' && detailSelection.demoSuggestion) {
+              handleSaveSuggestion(detailSelection.demoSuggestion);
+            } else {
+              handleSaveAiSuggestion(
+                rec,
+                detailSelection.sourceKind === 'gemini' ? 'gemini' : 'fallback'
+              );
+            }
+          }}
+          onSendAsSurprise={() => {
+            const payloadRec =
+              draftMsg.trim() && draftMsg.trim() !== rec.defaultMessage.trim()
+                ? { ...rec, defaultMessage: draftMsg.trim() }
+                : rec;
+            openDemoSurpriseFromAi(payloadRec);
+          }}
+          onOrderNow={() => openDemoOrderNow(rec)}
+          onRemindLater={() => openDemoRemindLater(rec)}
+          onNotNow={() => {
+            handleNotNowDemo(rec);
+            setCareSubView(partnerId, detailSelection.returnTo);
+          }}
+          onSkip={() => {
+            handleSkipAi(rec);
+            setCareSubView(partnerId, detailSelection.returnTo);
+          }}
+          onDismissAi={
+            detailSelection.kind === 'ai'
+              ? () => {
+                  handleDismissAi(rec);
+                  setCareSubView(partnerId, detailSelection.returnTo);
+                }
+              : undefined
+          }
+          onPlanDate={() => {
+            setCareSubView(partnerId, 'date_planning');
+            if (rec.suggestedDatePlanId) {
+              window.setTimeout(() => {
+                document
+                  .getElementById(`date-plan-card-${rec.suggestedDatePlanId}`)
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 80);
+            }
+          }}
+        />
+        {renderModals()}
+      </div>
+    );
+  }
+
+  if (currentCareSubView === 'surprise') {
+    return (
+      <div className="space-y-4 pb-2 relative">
+        {toastBanner}
+        <SubpageHeader
+          title={t.ia.care.surprisePageTitle}
+          subtitle={formatTemplate(t.care.forRecipient, { name: recipientMeta.display_name })}
+          backLabel={t.ia.back}
+          onBack={() => setCareSubView(partnerId, 'now')}
+        />
+
+        <div className="bg-gradient-to-br from-[#FBF7F5] via-white to-[#F4F1F9] rounded-[22px] p-4 ring-1 ring-[#9B93B8]/25 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.06)] space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#F5E8E7] flex items-center justify-center shrink-0">
+              <Gift className="w-5 h-5 text-[#C45E4E]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-[15px] font-semibold text-[#292832]">
+                {t.ia.care.surpriseCardTitle}
+              </h2>
+              <p className="text-[11.5px] text-[#85838D] mt-0.5 leading-snug">
+                {t.ia.care.surpriseCardDesc}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={suggestions.length === 0 && !aiResultByPartner[partnerId]}
+            onClick={openDemoSurpriseFromFirstAvailable}
+            className="w-full min-h-[42px] px-4 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] disabled:opacity-50 text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_8px_18px_-6px_rgba(232,140,125,0.5)] transition-all active:scale-95"
+          >
+            <Gift className="w-4 h-4 shrink-0" />
+            <span>{t.ia.care.surpriseCreateBtn}</span>
+          </button>
+        </div>
+
+        <DueRemindersSection
+          dueReminders={dueReminders}
+          t={t}
+          onOrderNow={(rem) => openDemoOrderNow(rem.recommendation, rem.id)}
+          onReschedule={(rem) => openDemoRemindLater(rem.recommendation)}
+          onDismiss={(remId) => dismissCareReminder(remId)}
+        />
+
+        <SenderOrdersTrackingSection
+          orders={mySenderOrders}
+          t={t}
+          onAdvanceStage={(orderId, nextStatus) => {
+            advanceMockOrderStatus(partnerId, orderId, nextStatus);
+            setToast({
+              kind: nextStatus === 'Delivered' ? 'sent' : 'feedback',
+              title: formatTemplate(
+                nextStatus === 'Delivered'
+                  ? t.deliveryCare.tracking.deliveredSurpriseToast
+                  : t.deliveryCare.tracking.stageUpdatedToast,
+                { stage: t.deliveryCare.tracking.stages[nextStatus] }
+              ),
+              showViewLink: nextStatus === 'Delivered',
+            });
+          }}
+          onCancelOrder={(orderId) => {
+            cancelMockOrder(partnerId, orderId);
+            setToast({
+              kind: 'feedback',
+              title: t.deliveryCare.tracking.cancelledToast,
+            });
+          }}
+        />
+
+        <PreparedSurprisesSection
+          records={myPreparedSurprises}
+          recipientName={recipientMeta.display_name}
+          t={t}
+          subtitle={formatTemplate(t.surpriseCare.preparedSectionSubtitle, {
+            partner: recipientMeta.display_name,
+          })}
+          isDemoMode
+          onEdit={(rec) => {
+            setSurpriseSourceRec(null);
+            setEditingSurprise(rec);
+            setSurpriseModalOpen(true);
+          }}
+          onCancel={(id) => {
+            cancelSurpriseCare(partnerId, id);
+            setToast({ kind: 'feedback', title: t.surpriseCare.cancelledToast });
+          }}
+          onDemoUnlock={(id) => {
+            unlockDemoSurpriseReveal(id);
+            setToast({
+              kind: 'sent',
+              title: formatTemplate(t.surpriseCare.demoUnlockedToast, {
+                partner: recipientMeta.display_name,
+              }),
+            });
+          }}
+        />
+
+        {dueReminders.length === 0 &&
+          activeOrdersCount === 0 &&
+          activePreparedCount === 0 && (
+            <div className="bg-white/90 rounded-[22px] p-5 text-center space-y-1.5 border border-[#E9E4DB]">
+              <p className="text-[12.5px] font-semibold text-[#292832]">
+                {t.surpriseCare.preparedSectionTitle} (0)
+              </p>
+              <p className="text-[11.5px] text-[#85838D] leading-snug">
+                {formatTemplate(t.surpriseCare.preparedSectionSubtitle, {
+                  partner: recipientMeta.display_name,
+                })}
+              </p>
+            </div>
+          )}
+
+        <ExpandableAccordion
+          title={t.ia.care.surprisePrivacyTitle}
+          icon={<ShieldCheck className="w-4 h-4 text-[#706794]" />}
+        >
+          <div className="space-y-1.5">
+            <p>{t.deliveryCare.recipient.maskedProgressHint}</p>
+            <p>{t.deliveryCare.tracking.noAutoCompleteHint}</p>
+          </div>
+        </ExpandableAccordion>
+
+        {renderModals()}
+      </div>
+    );
+  }
+
+  const activeScenarioTab: 'now' | 'plan_ahead' | 'date_planning' =
+    currentCareSubView === 'plan_ahead' || currentCareSubView === 'date_planning'
+      ? currentCareSubView
+      : 'now';
 
   return (
     <div className="space-y-4 pb-2 relative">
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="sticky top-0 z-30 rounded-2xl bg-[#292832]/92 backdrop-blur-[10px] text-white px-3.5 py-2.5 shadow-[0_12px_28px_-8px_rgba(41,40,50,0.35)] flex items-center justify-between gap-2 text-[12px]"
-        >
-          <span className="flex items-center gap-2 min-w-0">
-            <Check className="w-4 h-4 text-[#8FA89B] shrink-0" strokeWidth={2.3} />
-            <span className="truncate font-medium">{toast.title}</span>
-          </span>
-          {toast.showViewLink && (
-            <button
-              type="button"
-              onClick={() => {
-                setToast(null);
-                setActivePage(partnerId, 'notifications');
-              }}
-              className="text-[#E88C7D] font-semibold underline shrink-0 whitespace-nowrap active:scale-95 transition-transform"
-            >
-              {t.care.viewNotifications}
-            </button>
-          )}
-        </div>
-      )}
+      {toastBanner}
 
       <div>
         <div className="flex items-center justify-between gap-2">
@@ -2584,273 +3709,341 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
           </h1>
           <span className="text-[10.5px] text-[#85838D]">{t.meta.simulatedDemoData}</span>
         </div>
-        <p className="text-[12.5px] text-[#85838D] mt-0.5">{t.care.subtitle}</p>
+        <p className="text-[12.5px] text-[#85838D] mt-0.5">{t.ia.care.overviewSubtitle}</p>
       </div>
 
-      {/* Sub-navigation: Care Suggestions | Date Planning */}
+      {/* Scenario Tabs: Care for Now | Plan Ahead | Date Planning */}
       <div
         role="tablist"
         aria-label={t.care.title}
-        className="grid grid-cols-2 gap-1 p-1 bg-[#F4EFEA] rounded-2xl"
+        className="grid grid-cols-3 gap-1 p-1 bg-[#F4EFEA] rounded-2xl"
       >
         <button
           type="button"
           role="tab"
-          aria-selected={subTab === 'suggestions'}
-          onClick={() => setSubTab('suggestions')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 px-2 ${
-            subTab === 'suggestions'
+          aria-selected={activeScenarioTab === 'now'}
+          onClick={() => setCareSubView(partnerId, 'now')}
+          className={`min-h-[38px] rounded-xl text-[11.5px] font-semibold transition-all duration-200 active:scale-95 px-1.5 truncate ${
+            activeScenarioTab === 'now'
               ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
               : 'text-[#85838D] hover:text-[#292832]'
           }`}
         >
-          {t.care.tabSuggestions}
+          {t.ia.care.scenarios.now}
         </button>
         <button
           type="button"
           role="tab"
-          aria-selected={subTab === 'date_planning'}
-          onClick={() => setSubTab('date_planning')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 px-2 ${
-            subTab === 'date_planning'
+          aria-selected={activeScenarioTab === 'plan_ahead'}
+          onClick={() => setCareSubView(partnerId, 'plan_ahead')}
+          className={`min-h-[38px] rounded-xl text-[11.5px] font-semibold transition-all duration-200 active:scale-95 px-1.5 truncate ${
+            activeScenarioTab === 'plan_ahead'
               ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
               : 'text-[#85838D] hover:text-[#292832]'
           }`}
         >
-          <Calendar className="w-3.5 h-3.5 text-[#E88C7D]" />
-          <span>{t.care.tabDatePlanning}</span>
+          {t.ia.care.scenarios.planAhead}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeScenarioTab === 'date_planning'}
+          onClick={() => setCareSubView(partnerId, 'date_planning')}
+          className={`min-h-[38px] rounded-xl text-[11.5px] font-semibold transition-all duration-200 active:scale-95 flex items-center justify-center gap-1 px-1.5 truncate ${
+            activeScenarioTab === 'date_planning'
+              ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
+              : 'text-[#85838D] hover:text-[#292832]'
+          }`}
+        >
+          <Calendar className="w-3 h-3 text-[#E88C7D] shrink-0" />
+          <span className="truncate">{t.ia.care.scenarios.datePlanning}</span>
         </button>
       </div>
 
-      {subTab === 'date_planning' ? (
+      {/* Surprise Care Entry Card */}
+      <button
+        type="button"
+        onClick={() => setCareSubView(partnerId, 'surprise')}
+        className="w-full text-left bg-gradient-to-r from-[#FBF7F5] via-white to-[#F4F1F9] rounded-[22px] p-3.5 ring-1 ring-[#E88C7D]/30 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.06)] hover:ring-[#E88C7D]/60 transition-all active:scale-[0.985] flex items-center justify-between gap-3"
+      >
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-[#F5E8E7] flex items-center justify-center shrink-0">
+            <Gift className="w-5 h-5 text-[#C45E4E]" strokeWidth={1.9} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-display text-[14px] font-semibold text-[#292832]">
+                {t.ia.care.surpriseCardTitle}
+              </span>
+              {dueReminders.length > 0 && (
+                <span className="rounded-lg bg-[#FBF2E6] px-2 py-0.5 text-[10px] font-semibold text-[#6E4F28] tabular-nums">
+                  {formatTemplate(t.ia.care.surpriseCardBadgeDue, {
+                    count: dueReminders.length,
+                  })}
+                </span>
+              )}
+              {surpriseActiveTotal > 0 && (
+                <span className="rounded-lg bg-[#EFEDF5] px-2 py-0.5 text-[10px] font-semibold text-[#5B527E] tabular-nums">
+                  {formatTemplate(t.ia.care.surpriseCardBadgeActive, {
+                    count: surpriseActiveTotal,
+                  })}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-[#85838D] leading-snug mt-0.5">
+              {t.ia.care.surpriseCardDesc}
+            </p>
+          </div>
+        </div>
+        <ChevronRight className="w-4 h-4 text-[#85838D] shrink-0" />
+      </button>
+
+      {activeScenarioTab === 'date_planning' ? (
         capabilities.canUsePersonalizedDatePlanning ? (
           <div className="space-y-3">
-            {/* Header & Permitted Energy Context */}
             <section className="bg-white/85 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2">
               <h2 className="font-display text-[15px] font-semibold text-[#292832]">
                 {t.care.datePlanning.headerTitle}
               </h2>
-            <p className="text-[11.5px] text-[#85838D] leading-snug">
-              {t.care.datePlanning.headerSubtitle}
-            </p>
-            <div className="rounded-xl bg-[#EFEDF5]/75 px-3 py-2 text-[11px] font-medium text-[#5B527E]">
-              {!recipientSharing.energy
-                ? t.care.datePlanning.partnerPrivateEnergyBanner
-                : recipientProfile.latestEnergy < 62
-                  ? formatTemplate(t.care.datePlanning.partnerEnergyBannerTemplate, {
-                      partner: recipientMeta.display_name,
-                      score: recipientProfile.latestEnergy,
-                    })
-                  : formatTemplate(t.care.datePlanning.partnerHighEnergyBannerTemplate, {
-                      partner: recipientMeta.display_name,
-                      score: recipientProfile.latestEnergy,
-                    })}
-            </div>
-            <div className="rounded-xl bg-[#FDFBFA] border border-[#292832]/[0.05] px-3 py-2 text-[10.5px] text-[#85838D]">
-              {t.care.datePlanning.simulatedScheduleNotice}
-            </div>
-          </section>
+              <p className="text-[11.5px] text-[#85838D] leading-snug">
+                {t.care.datePlanning.headerSubtitle}
+              </p>
+              <div className="rounded-xl bg-[#EFEDF5]/75 px-3 py-2 text-[11px] font-medium text-[#5B527E]">
+                {!recipientSharing.energy
+                  ? t.care.datePlanning.partnerPrivateEnergyBanner
+                  : recipientProfile.latestEnergy < 62
+                    ? formatTemplate(t.care.datePlanning.partnerEnergyBannerTemplate, {
+                        partner: recipientMeta.display_name,
+                        score: recipientProfile.latestEnergy,
+                      })
+                    : formatTemplate(t.care.datePlanning.partnerHighEnergyBannerTemplate, {
+                        partner: recipientMeta.display_name,
+                        score: recipientProfile.latestEnergy,
+                      })}
+              </div>
+              <div className="rounded-xl bg-[#FDFBFA] border border-[#292832]/[0.05] px-3 py-2 text-[10.5px] text-[#85838D]">
+                {t.care.datePlanning.simulatedScheduleNotice}
+              </div>
+            </section>
 
-          {/* Pending / Accepted Couple Date Invitations (Synced Across Phones) */}
-          {incomingDateInvites.map((invite) => {
-            const planMeta = datePlans.find((p) => p.id === invite.planId) ?? buildDatePlanSuggestions({
-              viewerId: partnerId,
-              partnerId: defaultRecipient,
-              partnerEnergy: recipientProfile.latestEnergy,
-              partnerSharing: recipientSharing,
-              partnerAvoidLabels: recipientCarePrefs.avoid,
-            }).find((p) => p.id === invite.planId);
-            if (!planMeta) return null;
-            const copy = t.care.datePlanning.plans[planMeta.titleKey];
-            const senderName =
-              invite.invitedBy && presentationBundle.partnerMeta[invite.invitedBy]
-                ? presentationBundle.partnerMeta[invite.invitedBy].display_name
-                : recipientMeta.display_name;
+            {/* Pending / Accepted Couple Date Invitations (Synced Across Phones) */}
+            {incomingDateInvites.map((invite) => {
+              const planMeta =
+                datePlans.find((p) => p.id === invite.planId) ??
+                buildDatePlanSuggestions({
+                  viewerId: partnerId,
+                  partnerId: defaultRecipient,
+                  partnerEnergy: recipientProfile.latestEnergy,
+                  partnerSharing: recipientSharing,
+                  partnerAvoidLabels: recipientCarePrefs.avoid,
+                }).find((p) => p.id === invite.planId);
+              if (!planMeta) return null;
+              const copy = t.care.datePlanning.plans[planMeta.titleKey];
+              const senderName =
+                invite.invitedBy && presentationBundle.partnerMeta[invite.invitedBy]
+                  ? presentationBundle.partnerMeta[invite.invitedBy].display_name
+                  : recipientMeta.display_name;
 
-            return (
-              <section
-                key={`invite-${invite.planId}`}
-                role="status"
-                className="bg-gradient-to-r from-[#F5E8E7]/75 via-white to-[#EFEDF5]/75 rounded-[22px] p-3.5 ring-1 ring-[#E88C7D]/30 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.07)] space-y-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-bold text-[#B45A4C]">
-                    {formatTemplate(t.care.datePlanning.incomingInviteTitle, {
-                      partner: senderName,
-                    })}
-                  </span>
-                  <span className="text-[10px] font-semibold text-[#3D5E49] bg-[#8FA89B]/18 px-2 py-0.5 rounded-lg">
-                    {t.care.datePlanning.statusLabels[invite.status]}
-                  </span>
-                </div>
-                <div className="text-[13px] font-semibold text-[#292832]">
-                  {copy?.title ?? planMeta.titleKey}
-                </div>
-                <div className="text-[11px] text-[#85838D]">{planMeta.suggestedSlot}</div>
-
-                {invite.status === 'invited' && invite.invitee === partnerId && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => respondDatePlanInvite(partnerId, invite.planId, 'accepted')}
-                      className="min-h-[36px] px-3 rounded-xl bg-[#8FA89B] hover:bg-[#7B9687] text-white text-[11.5px] font-semibold active:scale-95 transition-all"
-                    >
-                      {t.care.datePlanning.acceptInviteBtn}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => respondDatePlanInvite(partnerId, invite.planId, 'declined')}
-                      className="min-h-[36px] px-3 rounded-xl bg-[#F4EFEA] text-[#8E4D42] text-[11.5px] font-semibold active:scale-95 transition-all"
-                    >
-                      {t.care.datePlanning.declineInviteBtn}
-                    </button>
+              return (
+                <section
+                  key={`invite-${invite.planId}`}
+                  role="status"
+                  className="bg-gradient-to-r from-[#F5E8E7]/75 via-white to-[#EFEDF5]/75 rounded-[22px] p-3.5 ring-1 ring-[#E88C7D]/30 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.07)] space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-[#B45A4C]">
+                      {formatTemplate(t.care.datePlanning.incomingInviteTitle, {
+                        partner: senderName,
+                      })}
+                    </span>
+                    <span className="text-[10px] font-semibold text-[#3D5E49] bg-[#8FA89B]/18 px-2 py-0.5 rounded-lg">
+                      {t.care.datePlanning.statusLabels[invite.status]}
+                    </span>
                   </div>
-                )}
+                  <div className="text-[13px] font-semibold text-[#292832]">
+                    {copy?.title ?? planMeta.titleKey}
+                  </div>
+                  <div className="text-[11px] text-[#85838D]">
+                    {invite.alternativeTimeProposal
+                      ? invite.alternativeTimeProposal.slotLabel
+                      : planMeta.suggestedSlot}
+                  </div>
+                  {invite.alternativeTimeProposal && (
+                    <div className="text-[10.5px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2.5 py-1 rounded-lg">
+                      {t.ia.notifications.altTimeProposedBadge}:{' '}
+                      {invite.alternativeTimeProposal.slotLabel}
+                      {invite.alternativeTimeProposal.note
+                        ? ` · ${invite.alternativeTimeProposal.note}`
+                        : ''}
+                    </div>
+                  )}
 
-                {invite.status === 'accepted' && (
-                  <button
-                    type="button"
-                    onClick={() => respondDatePlanInvite(partnerId, invite.planId, 'agreed')}
-                    className="w-full min-h-[36px] px-3 rounded-xl bg-[#292832] text-white text-[11.5px] font-semibold active:scale-95 transition-all"
-                  >
-                    {t.care.datePlanning.markAgreedBtn}
-                  </button>
-                )}
-              </section>
-            );
-          })}
+                  {invite.status === 'invited' && invite.invitee === partnerId && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => respondDatePlanInvite(partnerId, invite.planId, 'accepted')}
+                        className="min-h-[36px] px-3 rounded-xl bg-[#8FA89B] hover:bg-[#7B9687] text-white text-[11.5px] font-semibold active:scale-95 transition-all"
+                      >
+                        {t.care.datePlanning.acceptInviteBtn}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => respondDatePlanInvite(partnerId, invite.planId, 'declined')}
+                        className="min-h-[36px] px-3 rounded-xl bg-[#F4EFEA] text-[#8E4D42] text-[11.5px] font-semibold active:scale-95 transition-all"
+                      >
+                        {t.care.datePlanning.declineInviteBtn}
+                      </button>
+                    </div>
+                  )}
 
-          {/* 6 Category Filter Pills */}
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setSelectedDateCat('all')}
-              className={`min-h-[30px] px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
-                selectedDateCat === 'all'
-                  ? 'bg-[#292832] text-white'
-                  : 'bg-[#F4EFEA] text-[#85838D] hover:text-[#292832]'
-              }`}
-            >
-              {t.care.datePlanning.allCategories}
-            </button>
-            {DATE_PLAN_CATEGORIES.map((cat) => (
+                  {invite.status === 'accepted' && (
+                    <button
+                      type="button"
+                      onClick={() => respondDatePlanInvite(partnerId, invite.planId, 'agreed')}
+                      className="w-full min-h-[36px] px-3 rounded-xl bg-[#292832] text-white text-[11.5px] font-semibold active:scale-95 transition-all"
+                    >
+                      {t.care.datePlanning.markAgreedBtn}
+                    </button>
+                  )}
+                </section>
+              );
+            })}
+
+            {/* 6 Category Filter Pills */}
+            <div className="flex flex-wrap gap-1.5">
               <button
-                key={cat}
                 type="button"
-                onClick={() => setSelectedDateCat(cat)}
+                onClick={() => setSelectedDateCat('all')}
                 className={`min-h-[30px] px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
-                  selectedDateCat === cat
+                  selectedDateCat === 'all'
                     ? 'bg-[#292832] text-white'
                     : 'bg-[#F4EFEA] text-[#85838D] hover:text-[#292832]'
                 }`}
               >
-                {t.care.datePlanning.categories[cat]}
+                {t.care.datePlanning.allCategories}
               </button>
-            ))}
+              {DATE_PLAN_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedDateCat(cat)}
+                  className={`min-h-[30px] px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
+                    selectedDateCat === cat
+                      ? 'bg-[#292832] text-white'
+                      : 'bg-[#F4EFEA] text-[#85838D] hover:text-[#292832]'
+                  }`}
+                >
+                  {t.care.datePlanning.categories[cat]}
+                </button>
+              ))}
+            </div>
+
+            {datePlans.map((plan) => {
+              const copy = t.care.datePlanning.plans[plan.titleKey];
+              const interaction = datePlanInteractions[plan.id];
+              const myReaction = interaction?.reactionByPartner?.[partnerId];
+              const isHiddenSurpriseInvite = isDatePlanHiddenAsSurprise(
+                plan.id,
+                surpriseCareRecords,
+                partnerId
+              );
+              const inviteStatus = isHiddenSurpriseInvite ? 'none' : interaction?.status ?? 'none';
+
+              return (
+                <article
+                  id={`date-plan-card-${plan.id}`}
+                  key={plan.id}
+                  className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[10.5px] font-semibold text-[#706794] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
+                      {t.care.datePlanning.categories[plan.category]}
+                    </span>
+                    {inviteStatus !== 'none' ? (
+                      <span className="text-[10px] font-semibold text-[#3D5E49] bg-[#8FA89B]/18 px-2 py-0.5 rounded-lg">
+                        {t.care.datePlanning.statusLabels[inviteStatus]}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-[#85838D]">
+                        {t.care.datePlanning.energyFitLabels[plan.energyFit]} ·{' '}
+                        {t.care.datePlanning.budgetLabels[plan.estimatedBudget]}
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="font-display text-[14.5px] font-semibold text-[#292832] leading-snug">
+                    {copy?.title ?? plan.titleKey}
+                  </h3>
+                  <p className="text-[12px] text-[#292832]/85 leading-snug">
+                    {copy?.desc ?? ''}
+                  </p>
+
+                  <div className="rounded-xl bg-[#FDFBFA] border border-[#292832]/[0.05] px-3 py-2 text-[11px] text-[#85838D] flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {interaction?.alternativeTimeProposal && !isHiddenSurpriseInvite
+                        ? interaction.alternativeTimeProposal.slotLabel
+                        : plan.suggestedSlot}{' '}
+                      · {plan.availabilityNote}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleDatePlanReaction(partnerId, plan.id, 'like')}
+                      aria-pressed={myReaction === 'like'}
+                      className={`min-h-[36px] px-3 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1 transition-all active:scale-95 ${
+                        myReaction === 'like'
+                          ? 'bg-[#8FA89B]/22 text-[#3D5E49] ring-1 ring-[#8FA89B]/45'
+                          : 'bg-[#F4EFEA] text-[#292832]'
+                      }`}
+                    >
+                      <Heart className="w-3 h-3" />
+                      <span>
+                        {myReaction === 'like'
+                          ? t.care.datePlanning.likedBtn
+                          : t.care.datePlanning.likeBtn}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleDatePlanReaction(partnerId, plan.id, 'skip')}
+                      aria-pressed={myReaction === 'skip'}
+                      className={`min-h-[36px] px-3 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1 transition-all active:scale-95 ${
+                        myReaction === 'skip'
+                          ? 'bg-[#F5E8E7] text-[#8E4D42]'
+                          : 'bg-[#FDFBFA] text-[#85838D] border border-[#292832]/[0.06]'
+                      }`}
+                    >
+                      <ThumbsDown className="w-3 h-3" />
+                      <span>
+                        {myReaction === 'skip'
+                          ? t.care.datePlanning.skippedBtn
+                          : t.care.datePlanning.skipBtn}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={inviteStatus === 'invited' && interaction?.invitedBy === partnerId}
+                      onClick={() => sendDatePlanInvite(partnerId, plan.id)}
+                      className="flex-1 min-h-[36px] px-3 rounded-xl bg-[#E88C7D] hover:bg-[#DC7D6E] disabled:opacity-60 text-white text-[11px] font-semibold inline-flex items-center justify-center gap-1 transition-all active:scale-95"
+                    >
+                      <Send className="w-3 h-3 shrink-0" />
+                      <span className="truncate">
+                        {inviteStatus === 'invited' && interaction?.invitedBy === partnerId
+                          ? t.care.datePlanning.invitedBadge
+                          : t.care.datePlanning.invitePartnerBtn}
+                      </span>
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-
-          {/* Date Suggestion Cards */}
-          {datePlans.map((plan) => {
-            const copy = t.care.datePlanning.plans[plan.titleKey];
-            const interaction = datePlanInteractions[plan.id];
-            const myReaction = interaction?.reactionByPartner?.[partnerId];
-            const isHiddenSurpriseInvite = isDatePlanHiddenAsSurprise(
-              plan.id,
-              surpriseCareRecords,
-              partnerId
-            );
-            const inviteStatus = isHiddenSurpriseInvite ? 'none' : interaction?.status ?? 'none';
-
-            return (
-              <article
-                key={plan.id}
-                className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
-              >
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="text-[10.5px] font-semibold text-[#706794] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
-                    {t.care.datePlanning.categories[plan.category]}
-                  </span>
-                  {inviteStatus !== 'none' ? (
-                    <span className="text-[10px] font-semibold text-[#3D5E49] bg-[#8FA89B]/18 px-2 py-0.5 rounded-lg">
-                      {t.care.datePlanning.statusLabels[inviteStatus]}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-medium text-[#85838D]">
-                      {t.care.datePlanning.energyFitLabels[plan.energyFit]} ·{' '}
-                      {t.care.datePlanning.budgetLabels[plan.estimatedBudget]}
-                    </span>
-                  )}
-                </div>
-
-                <h3 className="font-display text-[14.5px] font-semibold text-[#292832] leading-snug">
-                  {copy?.title ?? plan.titleKey}
-                </h3>
-                <p className="text-[12px] text-[#292832]/85 leading-snug">
-                  {copy?.desc ?? ''}
-                </p>
-
-                <div className="rounded-xl bg-[#FDFBFA] border border-[#292832]/[0.05] px-3 py-2 text-[11px] text-[#85838D] flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    {plan.suggestedSlot} · {plan.availabilityNote}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleDatePlanReaction(partnerId, plan.id, 'like')}
-                    aria-pressed={myReaction === 'like'}
-                    className={`min-h-[36px] px-3 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1 transition-all active:scale-95 ${
-                      myReaction === 'like'
-                        ? 'bg-[#8FA89B]/22 text-[#3D5E49] ring-1 ring-[#8FA89B]/45'
-                        : 'bg-[#F4EFEA] text-[#292832]'
-                    }`}
-                  >
-                    <Heart className="w-3 h-3" />
-                    <span>
-                      {myReaction === 'like'
-                        ? t.care.datePlanning.likedBtn
-                        : t.care.datePlanning.likeBtn}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => toggleDatePlanReaction(partnerId, plan.id, 'skip')}
-                    aria-pressed={myReaction === 'skip'}
-                    className={`min-h-[36px] px-3 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1 transition-all active:scale-95 ${
-                      myReaction === 'skip'
-                        ? 'bg-[#F5E8E7] text-[#8E4D42]'
-                        : 'bg-[#FDFBFA] text-[#85838D] border border-[#292832]/[0.06]'
-                    }`}
-                  >
-                    <ThumbsDown className="w-3 h-3" />
-                    <span>
-                      {myReaction === 'skip'
-                        ? t.care.datePlanning.skippedBtn
-                        : t.care.datePlanning.skipBtn}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={inviteStatus === 'invited' && interaction?.invitedBy === partnerId}
-                    onClick={() => sendDatePlanInvite(partnerId, plan.id)}
-                    className="flex-1 min-h-[36px] px-3 rounded-xl bg-[#E88C7D] hover:bg-[#DC7D6E] disabled:opacity-60 text-white text-[11px] font-semibold inline-flex items-center justify-center gap-1 transition-all active:scale-95"
-                  >
-                    <Send className="w-3 h-3 shrink-0" />
-                    <span className="truncate">
-                      {inviteStatus === 'invited' && interaction?.invitedBy === partnerId
-                        ? t.care.datePlanning.invitedBadge
-                        : t.care.datePlanning.invitePartnerBtn}
-                    </span>
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
         ) : (
           <div className="space-y-3">
             <section className="bg-white/85 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2">
@@ -2944,10 +4137,46 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
               upgradeLabel={t.care.membershipLock.upgradeCta}
               backLabel={t.care.membershipLock.backToSuggestions}
               onUpgrade={() => openPremiumMembership(partnerId)}
-              onBack={() => setSubTab('suggestions')}
+              onBack={() => setCareSubView(partnerId, 'now')}
             />
           </div>
         )
+      ) : activeScenarioTab === 'plan_ahead' ? (
+        (() => {
+          const activeAiResult = aiResultByPartner[partnerId];
+          const activePlanAheadRecs =
+            activeAiResult?.data.planAheadRecommendations !== undefined
+              ? activeAiResult.data.planAheadRecommendations
+              : demoBaselinePlanAhead?.planAheadRecommendations ?? [];
+          const activePlanAheadSummary =
+            activeAiResult?.data.planAheadSummary ?? demoBaselinePlanAhead?.planAheadSummary;
+          const activeSourceKind: 'gemini' | 'fallback' | 'baseline' = activeAiResult
+            ? activeAiResult.source
+            : 'baseline';
+
+          return (
+            <PlanAheadSection
+              t={t}
+              language={language}
+              recipientName={recipientMeta.display_name}
+              energyShared={recipientSharing.energy}
+              sleepShared={recipientSharing.sleep}
+              canShowFutureForecast={recipientAnalytics.recordCount >= 7}
+              forecastDays={recipientAnalytics.forecast7Days}
+              overallMean={recipientAnalytics.overallMean}
+              recent7DayMean={recipientAnalytics.recent7DayMean}
+              recordedDaysCount={recipientAnalytics.recordCount}
+              pattern={recipientPattern}
+              recommendations={activePlanAheadRecs}
+              planAheadSummary={activePlanAheadSummary}
+              sourceKind={activeSourceKind}
+              savedAiSuggestions={mySavedAiSuggestions}
+              dismissedIds={combinedAiDismissedIds}
+              hiddenByReminderIds={upcomingReminderRecIds}
+              onOpenDetail={(rec, src) => openDetailForAi(rec, 'plan_ahead', src)}
+            />
+          );
+        })()
       ) : (
         <>
           <section
@@ -2971,15 +4200,12 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
               </div>
             </div>
 
-            <div className="pt-2.5 border-t border-[#292832]/[0.05] space-y-1.5 text-[12px]">
+            <div className="pt-2 border-t border-[#292832]/[0.05] space-y-1 text-[11.5px]">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[#85838D] shrink-0">{t.care.predictedWindowLabel}</span>
                 <span className="font-medium text-[#292832] text-right">{predictedWindowText}</span>
               </div>
-              <div className="text-[#292832]/90 leading-relaxed">
-                <span className="text-[#85838D]">{t.care.reasonLabel} </span>
-                {predictedReasonText}
-              </div>
+              <p className="text-[#292832]/85 leading-snug line-clamp-2">{predictedReasonText}</p>
             </div>
           </section>
 
@@ -3015,15 +4241,13 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
             </div>
           )}
 
-          <DueRemindersSection
-            dueReminders={dueReminders}
+          <CareForNowHeader
             t={t}
-            onOrderNow={(rem) => openDemoOrderNow(rem.recommendation, rem.id)}
-            onReschedule={(rem) => openDemoRemindLater(rem.recommendation)}
-            onDismiss={(remId) => dismissCareReminder(remId)}
+            energyShared={recipientSharing.energy}
+            currentEnergy={recipientSharing.energy ? recipientProfile.latestEnergy : null}
+            recipientName={recipientMeta.display_name}
           />
 
-          {/* Stage 5.3 / 5.4 / 5.5 Gemini Personalized Care Engine */}
           <AiCareEnginePanel
             idPrefix={partnerId}
             recipientName={recipientMeta.display_name}
@@ -3048,73 +4272,13 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
               });
             }}
             onGenerate={handleGenerateAi}
-            onSendAiCare={handleSendAiCare}
-            onSendAsSurprise={openDemoSurpriseFromAi}
-            onSaveAiSuggestion={handleSaveAiSuggestion}
-            onDismiss={handleDismissAi}
-            onSkip={handleSkipAi}
-            onOrderNow={(rec) => openDemoOrderNow(rec)}
-            onRemindLater={openDemoRemindLater}
-            onNotNow={handleNotNowDemo}
-          />
-
-          <SenderOrdersTrackingSection
-            orders={mySenderOrders}
-            t={t}
-            onAdvanceStage={(orderId, nextStatus) => {
-              advanceMockOrderStatus(partnerId, orderId, nextStatus);
-              setToast({
-                kind: nextStatus === 'Delivered' ? 'sent' : 'feedback',
-                title: formatTemplate(
-                  nextStatus === 'Delivered'
-                    ? t.deliveryCare.tracking.deliveredSurpriseToast
-                    : t.deliveryCare.tracking.stageUpdatedToast,
-                  { stage: t.deliveryCare.tracking.stages[nextStatus] }
-                ),
-                showViewLink: nextStatus === 'Delivered',
-              });
-            }}
-            onCancelOrder={(orderId) => {
-              cancelMockOrder(partnerId, orderId);
-              setToast({
-                kind: 'feedback',
-                title: t.deliveryCare.tracking.cancelledToast,
-              });
-            }}
-          />
-
-          <PreparedSurprisesSection
-            records={myPreparedSurprises}
-            recipientName={recipientMeta.display_name}
-            t={t}
-            subtitle={formatTemplate(t.surpriseCare.preparedSectionSubtitle, {
-              partner: recipientMeta.display_name,
-            })}
-            isDemoMode
-            onEdit={(rec) => {
-              setSurpriseSourceRec(null);
-              setEditingSurprise(rec);
-              setSurpriseModalOpen(true);
-            }}
-            onCancel={(id) => {
-              cancelSurpriseCare(partnerId, id);
-              setToast({ kind: 'feedback', title: t.surpriseCare.cancelledToast });
-            }}
-            onDemoUnlock={(id) => {
-              unlockDemoSurpriseReveal(id);
-              setToast({
-                kind: 'sent',
-                title: formatTemplate(t.surpriseCare.demoUnlockedToast, {
-                  partner: recipientMeta.display_name,
-                }),
-              });
-            }}
+            onOpenDetail={(rec, src) => openDetailForAi(rec, 'now', src)}
           />
 
           <section
             id={`demo-preset-care-section-${partnerId}`}
             aria-label={t.care.personalizedSuggestionsTitle}
-            className="space-y-3"
+            className="space-y-2.5"
           >
             <div className="flex items-center justify-between px-0.5">
               <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
@@ -3128,8 +4292,6 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
             {suggestions.map((suggestion) => {
               const localized = t.care.suggestions[suggestion.id];
               const isSaved = mySavedIds.includes(suggestion.id);
-              const isEditing = editingId === suggestion.id;
-              const draftValue = customDrafts[suggestion.id] ?? localized.defaultMessage;
               const isNonPurchase = suggestion.category === 'message';
               const presetRec = demoPresetToAiRec(suggestion);
               const isPurchase =
@@ -3137,14 +4299,16 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
                 (presetRec ? isPurchaseOrientedRecommendation(presetRec) : false);
 
               return (
-                <article
+                <button
                   key={suggestion.id}
-                  className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3 transition-shadow duration-300 hover:shadow-[0_14px_34px_-10px_rgba(41,40,50,0.09)]"
+                  type="button"
+                  onClick={() => openDetailForPreset(suggestion)}
+                  className="w-full text-left bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] hover:ring-1 hover:ring-[#E88C7D]/45 transition-all active:scale-[0.985] space-y-2.5"
                 >
                   <div className="flex items-start gap-3">
                     <SuggestionIconBadge category={suggestion.category} />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-0.5">
                         {isPurchase ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#B45A4C] bg-[#F5E8E7] px-2 py-0.5 rounded-lg">
                             <ShoppingBag className="w-2.5 h-2.5" />
@@ -3155,232 +4319,39 @@ function PresentationCareContent({ partnerId }: { partnerId: PartnerId }) {
                             {isNonPurchase ? t.care.nonPurchaseTag : t.care.homeGestureTag}
                           </span>
                         )}
+                        {isSaved && (
+                          <span className="text-[10px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
+                            {t.care.saved}
+                          </span>
+                        )}
                       </div>
                       <h3 className="font-display text-[15px] font-semibold text-[#292832] leading-snug">
                         {localized.title}
                       </h3>
-                      <p className="text-[12.5px] text-[#292832]/85 mt-1 leading-relaxed">
+                      <p className="text-[12px] text-[#85838D] mt-1 leading-snug line-clamp-2">
                         {localized.description}
                       </p>
                     </div>
                   </div>
 
-                  <div className="bg-[#FDFBFA] rounded-2xl p-3 space-y-1.5 text-[11.5px] border border-[#292832]/[0.04]">
-                    <p className="text-[#292832]/85 leading-snug">
-                      <span className="font-semibold text-[#292832]">{t.care.whyThisFits} </span>
-                      {localized.reason}
-                    </p>
-                    <div className="flex items-center gap-1.5 text-[#85838D]">
-                      <Clock className="w-3.5 h-3.5 shrink-0" strokeWidth={1.9} />
-                      <span>
-                        {t.care.suggestedTiming} {localized.timing}
-                      </span>
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#292832]/[0.05]">
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#85838D] min-w-0">
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{localized.timing}</span>
                     </div>
+                    <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#C45E4E] shrink-0">
+                      <span>{t.ia.care.detailOpenCta}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
                   </div>
-
-                  {isPurchase && presetRec ? (
-                    <div className="space-y-2 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => openDemoOrderNow(presetRec)}
-                        className="w-full min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12.5px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_8px_18px_-6px_rgba(232,140,125,0.55)] transition-all duration-200 active:scale-[0.98]"
-                      >
-                        <ShoppingBag className="w-4 h-4 shrink-0" strokeWidth={2} />
-                        <span>{t.deliveryCare.orderNowBtn}</span>
-                      </button>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openDemoRemindLater(presetRec)}
-                          className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
-                        >
-                          <Bell className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                          <span className="truncate">{t.deliveryCare.remindLaterBtn}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleNotNowDemo(presetRec)}
-                          className="min-h-[40px] px-3 py-2 rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 hover:bg-[#F4EFEA] text-[#85838D] hover:text-[#292832] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
-                        >
-                          <EyeOff className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                          <span className="truncate">{t.deliveryCare.notNowBtn}</span>
-                        </button>
-                      </div>
-
-                      <div className="pt-1 border-t border-[#292832]/[0.05] flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => handleSaveSuggestion(suggestion)}
-                          aria-pressed={isSaved}
-                          className={`min-h-[32px] px-3 py-1 rounded-xl text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all active:scale-95 ${
-                            isSaved
-                              ? 'bg-[#EFEDF5] text-[#5B527E]'
-                              : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
-                          }`}
-                        >
-                          {isSaved ? (
-                            <Check className="w-3 h-3 shrink-0" strokeWidth={2.2} />
-                          ) : (
-                            <Bookmark className="w-3 h-3 shrink-0" strokeWidth={2} />
-                          )}
-                          <span>{isSaved ? t.care.saved : t.care.saveSuggestion}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => toggleCustomize(suggestion)}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-[#706794] hover:underline active:scale-95 transition-transform"
-                        >
-                          <Pencil className="w-3 h-3" />
-                          <span>{isEditing ? t.care.hideMessageEditor : t.care.editMessage}</span>
-                        </button>
-
-                        {isEditing && (
-                          <div className="mt-2">
-                            <label
-                              htmlFor={`care-msg-${partnerId}-${suggestion.id}`}
-                              className="block text-[11px] font-medium text-[#85838D] mb-1"
-                            >
-                              {formatTemplate(t.care.customMessageLabel, {
-                                name: recipientMeta.display_name,
-                              })}
-                            </label>
-                            <textarea
-                              id={`care-msg-${partnerId}-${suggestion.id}`}
-                              rows={2}
-                              value={draftValue}
-                              onChange={(e) =>
-                                setCustomDrafts((prev) => ({
-                                  ...prev,
-                                  [suggestion.id]: e.target.value,
-                                }))
-                              }
-                              className="w-full rounded-2xl bg-[#FDFBFA] border border-[#292832]/10 p-2.5 text-[12px] text-[#292832] focus:outline-none focus:ring-2 focus:ring-[#E88C7D]"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => handleSendCare(suggestion)}
-                          className="min-h-[44px] px-3 py-2 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_-6px_rgba(232,140,125,0.55)] transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-[#292832]"
-                        >
-                          <Send className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                          <span className="truncate">{t.care.sendCare}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSaveSuggestion(suggestion)}
-                          aria-pressed={isSaved}
-                          className={`min-h-[44px] px-3 py-2 rounded-2xl text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-[#9B93B8] ${
-                            isSaved
-                              ? 'bg-[#EFEDF5] text-[#5B527E] ring-1 ring-[#9B93B8]/40'
-                              : 'bg-[#F4EFEA] text-[#292832] hover:bg-[#EAE3DC]'
-                          }`}
-                        >
-                          {isSaved ? (
-                            <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
-                          ) : (
-                            <Bookmark className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                          )}
-                          <span className="truncate">
-                            {isSaved ? t.care.saved : t.care.saveSuggestion}
-                          </span>
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => openDemoSurpriseFromPreset(suggestion)}
-                        className="w-full min-h-[40px] px-3 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-[0.98]"
-                      >
-                        <Gift className="w-3.5 h-3.5 shrink-0 text-[#C45E4E]" strokeWidth={2} />
-                        <span>{t.surpriseCare.sendAsSurpriseBtn}</span>
-                      </button>
-
-                      <div className="pt-1 border-t border-[#292832]/[0.05] flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            trackSkippedSuggestion(partnerId, suggestion.id);
-                            setToast({
-                              kind: 'feedback',
-                              title: formatTemplate(t.care.skippedToast, {
-                                title: localized.title,
-                                name: recipientMeta.display_name,
-                              }),
-                            });
-                          }}
-                          className="min-h-[32px] px-2.5 rounded-xl bg-[#FDFBFA] hover:bg-[#F4EFEA] text-[#85838D] text-[11px] font-medium inline-flex items-center gap-1 transition-all active:scale-95"
-                        >
-                          <SkipForward className="w-3 h-3" />
-                          <span>{t.care.skipBtn}</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </article>
+                </button>
               );
             })}
           </section>
         </>
       )}
 
-      <SurpriseCareModal
-        open={surpriseModalOpen}
-        onClose={() => {
-          setSurpriseModalOpen(false);
-          setEditingSurprise(null);
-        }}
-        t={t}
-        recipientName={recipientMeta.display_name}
-        sourceRecommendation={surpriseSourceRec}
-        editingRecord={editingSurprise}
-        datePlanOptions={datePlanOptionsForModal}
-        isDemoMode
-        onConfirmCreate={handleConfirmDemoSurpriseCreate}
-        onConfirmEdit={(id, patch) => {
-          updateSurpriseCare(partnerId, id, patch);
-          setToast({ kind: 'saved', title: t.surpriseCare.updatedToast });
-        }}
-      />
-
-      <MockDeliveryPlatformModal
-        open={deliveryModalOpen}
-        recommendation={deliveryRec}
-        recipientId={defaultRecipient}
-        recipientName={recipientMeta.display_name}
-        language={language}
-        t={t}
-        reminderId={activeReminderId}
-        isDemoMode
-        onClose={() => {
-          setDeliveryModalOpen(false);
-          setDeliveryRec(null);
-          setActiveReminderId(undefined);
-        }}
-        onCompleteOrderFlow={handleCompleteDemoOrderFlow}
-      />
-
-      <RemindLaterSheet
-        open={remindSheetOpen}
-        recommendationTitle={remindRec?.title ?? ''}
-        t={t}
-        onClose={() => {
-          setRemindSheetOpen(false);
-          setRemindRec(null);
-        }}
-        onConfirm={handleConfirmDemoReminder}
-      />
+      {renderModals()}
     </div>
   );
 }

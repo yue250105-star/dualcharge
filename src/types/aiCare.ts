@@ -40,6 +40,8 @@ export interface AiCareRecommendationMetadata {
   fingerprint: string;
 }
 
+export type AiCareTimeHorizon = 'now' | 'ahead';
+
 export interface AiCareRecommendation {
   id: string;
   title: string;
@@ -50,6 +52,12 @@ export interface AiCareRecommendation {
   personalizationReason: string;
   confidence: AiCareConfidence;
   defaultMessage: string;
+  timeHorizon?: AiCareTimeHorizon;
+  evidenceSummary?: string;
+  evidenceDetails?: string[];
+  targetWeekdayIndex?: number;
+  targetDateISO?: string;
+  suggestedDatePlanId?: string;
   actionType?: string;
   communicationStyle?: AiCareCommunicationStyle;
   effortLevel?: AiCareEffortLevel;
@@ -63,6 +71,8 @@ export interface AiCareResponse {
   recipientName: string;
   evidence: string[];
   recommendations: AiCareRecommendation[];
+  planAheadSummary?: string;
+  planAheadRecommendations?: AiCareRecommendation[];
   limitations: string;
 }
 
@@ -351,6 +361,7 @@ export interface AiCareRequestContext {
     activityShared: boolean;
     cycleShared?: boolean;
     insufficientHistoricalData: boolean;
+    canShowFutureForecast?: boolean;
     baselinePhase?: 'building' | 'preliminary';
     recordedDaysCount: number;
     currentEnergyIndex?: number;
@@ -369,8 +380,10 @@ export interface AiCareRequestContext {
       hasPattern: boolean;
       detectedWeekdayIndex: number | null;
       weekdayMean: number | null;
+      dropFromOverall?: number | null;
       observationCount: number;
       qualifyingWeeks: number;
+      percentageBelowBaseline?: number;
     };
     upcomingForecast?: Array<{
       dateISO: string;

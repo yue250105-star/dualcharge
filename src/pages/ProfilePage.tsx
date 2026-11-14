@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Activity,
-  ArrowLeft,
   Bell,
   Bookmark,
   Check,
@@ -17,7 +16,6 @@ import {
   RotateCcw,
   Send,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   Trash2,
   UserPlus,
@@ -25,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { PremiumFeaturePreview } from '@/src/components/membership/PremiumFeaturePreview';
+import { SubpageHeader } from '@/src/components/phone/SubpageHeader';
 import { UserAvatar } from '@/src/components/ui/UserAvatar';
 import {
   NORMAL_LOCAL_INVITE_CODE,
@@ -33,29 +32,24 @@ import {
 } from '@/src/context/DualChargeContext';
 import { createDefaultNotificationPreferences } from '@/src/data/presentation/presentationConstants';
 import { formatTemplate, TranslationDictionary } from '@/src/i18n/translations';
-import {
-  COUPLE_PROPOSED_PRICING,
-  getMembershipCapabilities,
-  MEMBERSHIP_COMPARISON_MATRIX,
-} from '@/src/services/membershipService';
+import { getMembershipCapabilities } from '@/src/services/membershipService';
 import { sortSavedSuggestionsNewestFirst } from '@/src/services/savedSuggestionsStore';
 import { AiCareSavedItem, LearnedPreferenceProfile } from '@/src/types/aiCare';
 import {
-  CoupleBillingPlan,
   CoupleMembershipState,
   LanguageCode,
   NotificationFrequencyPreference,
   NotificationPreferences,
   PartnerId,
   SensitivePreviewMode,
-  SharingPreferences,
   SharingPrefKey,
-  WidgetPreviewStyle,
 } from '@/src/types/dualcharge';
 
 interface ProfilePageProps {
   partnerId: PartnerId;
   scope?: 'demo' | 'normal';
+  titleOverride?: string;
+  onBackOverride?: () => void;
 }
 
 interface ToggleRowProps {
@@ -114,12 +108,6 @@ const FREQUENCY_OPTIONS: NotificationFrequencyPreference[] = [
   'important_only',
 ];
 const PREVIEW_MODE_OPTIONS: SensitivePreviewMode[] = ['full', 'neutral'];
-const WIDGET_STYLE_OPTIONS: WidgetPreviewStyle[] = [
-  'shared_energy',
-  'care_reminder',
-  'daily_goal',
-  'date_countdown',
-];
 
 function formatSavedDate(iso: string, language: LanguageCode): string {
   const date = new Date(iso);
@@ -645,446 +633,13 @@ function LearnedPreferencesSection({
   );
 }
 
-interface MembershipComparisonViewProps {
-  scope: 'demo' | 'normal';
-  membership: CoupleMembershipState;
-  isCoupleLinked: boolean;
-  billingPlan: CoupleBillingPlan;
-  onChangeBillingPlan: (plan: CoupleBillingPlan) => void;
-  onBack: () => void;
-  onOpenReviewModal: () => void;
-  onEnterDemo?: () => void;
-  justUpgraded: boolean;
-  memberNames: { a: string; b: string; activatedBy?: string | null };
-  widgetStyle?: WidgetPreviewStyle;
-  onChangeWidgetStyle?: (style: WidgetPreviewStyle) => void;
-  widgetSummaryData?: {
-    meName: string;
-    meEnergy: number;
-    partnerName: string;
-    partnerEnergy: number;
-    partnerSharing: SharingPreferences;
-  };
-  t: TranslationDictionary;
-}
-
-function MembershipComparisonView({
-  scope,
-  membership,
-  isCoupleLinked,
-  billingPlan,
-  onChangeBillingPlan,
-  onBack,
-  onOpenReviewModal,
-  onEnterDemo,
-  justUpgraded,
-  memberNames,
-  widgetStyle = 'shared_energy',
-  onChangeWidgetStyle,
-  widgetSummaryData,
-  t,
-}: MembershipComparisonViewProps) {
-  const capabilities = getMembershipCapabilities(membership, isCoupleLinked);
-  const up = t.profile.membershipUpgrade;
-  const isPremium = capabilities.isPremium;
-  const activePrice =
-    billingPlan === 'monthly'
-      ? COUPLE_PROPOSED_PRICING.monthlyLabel
-      : COUPLE_PROPOSED_PRICING.yearlyLabel;
-  const activeUnit =
-    billingPlan === 'monthly' ? t.profile.monthlyUnit : t.profile.yearlyUnit;
-
-  return (
-    <div className="space-y-4 pb-2">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 min-h-[34px] px-3 rounded-xl bg-[#F4EFEA] hover:bg-[#EAE3DC] text-[12px] font-semibold text-[#292832] transition-all active:scale-95"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        <span>{up.backToProfile}</span>
-      </button>
-
-      {justUpgraded && isPremium && (
-        <div
-          role="status"
-          className="rounded-[22px] bg-gradient-to-r from-[#8FA89B]/25 via-[#8FA89B]/18 to-[#EFEDF5] border border-[#8FA89B]/45 p-3.5 flex items-start gap-2.5 text-[#284735]"
-        >
-          <Crown className="w-4 h-4 text-[#5B527E] shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <div className="text-[12.5px] font-bold">{up.welcomeBanner}</div>
-            <p className="text-[11px] leading-snug text-[#3D5E49]">
-              {up.premiumStatusDesc}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* 1. Current Membership Status */}
-      <section
-        aria-label={up.currentStatusLabel}
-        className={`rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2 ${
-          isPremium
-            ? 'bg-gradient-to-br from-[#FBF7F5] via-white to-[#EFEDF5] ring-1 ring-[#9B93B8]/35'
-            : 'bg-white'
-        }`}
-      >
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <span className="text-[11px] font-semibold text-[#706794]">
-            {up.currentStatusLabel}
-          </span>
-          <span className="text-[10.5px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
-            {t.profile.oneCouplePlanBadge}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Crown
-            className={`w-4 h-4 shrink-0 ${
-              isPremium ? 'text-[#E88C7D]' : 'text-[#85838D]'
-            }`}
-          />
-          <h2 className="font-display text-[16px] font-semibold text-[#292832]">
-            {isPremium ? up.premiumStatusTitle : up.freeStatusTitle}
-          </h2>
-        </div>
-
-        <p className="text-[12px] text-[#85838D] leading-relaxed">
-          {isPremium ? up.premiumStatusDesc : up.freeStatusDesc}
-        </p>
-
-        {isPremium && memberNames.activatedBy && (
-          <div className="text-[11px] font-medium text-[#3D5E49] bg-[#8FA89B]/15 rounded-xl px-3 py-2 space-y-0.5">
-            <div>
-              {formatTemplate(up.purchasedByTemplate, {
-                name: memberNames.activatedBy,
-                date: membership.startDateISO ?? '',
-                plan:
-                  membership.plan === 'monthly'
-                    ? t.profile.billingMonthlyLabel
-                    : t.profile.billingYearlyLabel,
-              })}
-            </div>
-            <div className="text-[10.5px] text-[#3D5E49]/85">{t.profile.managePlanNote}</div>
-          </div>
-        )}
-      </section>
-
-      {/* Billing Cycle & Plan Cards */}
-      <section aria-label={t.profile.membershipTitle} className="space-y-3">
-        <div className="grid grid-cols-2 gap-1 p-1 bg-[#F4EFEA] rounded-2xl">
-          <button
-            type="button"
-            onClick={() => onChangeBillingPlan('monthly')}
-            className={`min-h-[36px] rounded-xl text-[11.5px] font-semibold transition-all ${
-              billingPlan === 'monthly'
-                ? 'bg-white text-[#292832] shadow-sm'
-                : 'text-[#85838D]'
-            }`}
-          >
-            {t.profile.billingMonthlyLabel} · {COUPLE_PROPOSED_PRICING.monthlyLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => onChangeBillingPlan('yearly')}
-            className={`min-h-[36px] rounded-xl text-[11.5px] font-semibold transition-all ${
-              billingPlan === 'yearly'
-                ? 'bg-white text-[#292832] shadow-sm'
-                : 'text-[#85838D]'
-            }`}
-          >
-            {t.profile.billingYearlyLabel} · {COUPLE_PROPOSED_PRICING.yearlyLabel}
-          </button>
-        </div>
-
-        {/* Free Plan Card */}
-        <div className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2">
-          <div className="flex items-baseline justify-between">
-            <h3 className="font-display text-[14.5px] font-semibold text-[#292832]">
-              {t.profile.freePlanTitle}
-            </h3>
-            <span className="font-display text-[14px] font-bold text-[#292832] tabular-nums">
-              {t.profile.freePrice}{' '}
-              <span className="text-[11px] font-normal text-[#85838D]">
-                {t.profile.perMonth}
-              </span>
-            </span>
-          </div>
-          <ul className="space-y-1 text-[12px] text-[#85838D]">
-            {t.profile.freeBenefits.map((benefit, idx) => (
-              <li key={idx} className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-[#8FA89B] shrink-0" />
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Couple Premium Card */}
-        <div className="bg-gradient-to-br from-white via-[#FDFBFA] to-[#EFEDF5]/75 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] ring-1 ring-[#9B93B8]/35 space-y-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <Crown className="w-4 h-4 text-[#9B93B8]" strokeWidth={2} />
-              <h3 className="font-display text-[14.5px] font-semibold text-[#292832]">
-                {t.profile.premiumPlanTitle}
-              </h3>
-            </div>
-            <span className="font-display text-[13.5px] font-bold text-[#5B527E] tabular-nums">
-              {activePrice}{' '}
-              <span className="text-[11px] font-normal text-[#85838D]">
-                {activeUnit}
-              </span>
-            </span>
-          </div>
-
-          <ul className="space-y-1 text-[12px] text-[#292832]/85">
-            {t.profile.premiumBenefits.map((benefit, idx) => (
-              <li key={idx} className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-[#E88C7D] shrink-0" />
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="rounded-xl bg-[#FDFBFA] border border-[#292832]/[0.05] px-3 py-2 text-[10.5px] text-[#85838D] space-y-0.5">
-            {billingPlan === 'yearly' && (
-              <div className="font-semibold text-[#5B527E]">{t.profile.yearlySavingsNote}</div>
-            )}
-            <div>{up.illustrativePricingLabel}</div>
-          </div>
-
-          {/* Upgrade / Unpaired Guard / Normal Prototype Action */}
-          {scope === 'demo' ? (
-            isPremium ? (
-              <div className="w-full min-h-[42px] px-3 rounded-2xl bg-[#8FA89B]/20 text-[#3D5E49] text-[12px] font-semibold flex items-center justify-center gap-1.5">
-                <Check className="w-4 h-4 shrink-0" />
-                <span>{t.profile.premiumActiveBadge}</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={onOpenReviewModal}
-                className="w-full min-h-[44px] px-3 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12.5px] font-semibold flex items-center justify-center gap-1.5 shadow-[0_8px_20px_-8px_rgba(232,140,125,0.65)] transition-all active:scale-95"
-              >
-                <Crown className="w-4 h-4 shrink-0" />
-                <span>{formatTemplate(up.selectedPlanBtn, { price: activePrice })}</span>
-              </button>
-            )
-          ) : !capabilities.canPurchaseCouplePremium ? (
-            <div className="rounded-2xl bg-[#FBF2E6] border border-[#E5C89E]/55 p-3 space-y-2">
-              <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#6E4F28]">
-                <Lock className="w-3.5 h-3.5 shrink-0" />
-                <span>{up.unpairedGuardTitle}</span>
-              </div>
-              <p className="text-[11px] text-[#6E4F28]/90 leading-snug">
-                {up.unpairedGuardBody}
-              </p>
-              <button
-                type="button"
-                onClick={onBack}
-                className="min-h-[36px] px-3 rounded-xl bg-white text-[#292832] text-[11px] font-semibold border border-[#292832]/10 active:scale-95 transition-all"
-              >
-                {up.unpairedGuardLinkBtn}
-              </button>
-            </div>
-          ) : (
-            <div className="rounded-2xl bg-[#EFEDF5]/75 p-3 space-y-2">
-              <p className="text-[11px] text-[#5B527E] leading-snug">
-                {up.normalModePrototypeNote}
-              </p>
-              {onEnterDemo && (
-                <button
-                  type="button"
-                  onClick={onEnterDemo}
-                  className="w-full min-h-[38px] px-3 rounded-xl bg-[#9B93B8] hover:bg-[#8A81AC] text-white text-[11.5px] font-semibold inline-flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>{t.normalMode.enterPresentationDemo}</span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 3. Detailed 12-Row Feature Comparison Table */}
-      <section
-        aria-label={up.comparisonTitle}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3"
-      >
-        <div>
-          <h3 className="font-display text-[14.5px] font-semibold text-[#292832]">
-            {up.comparisonTitle}
-          </h3>
-          <p className="text-[11.5px] text-[#85838D] mt-0.5 leading-snug">
-            {up.comparisonSubtitle}
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          {MEMBERSHIP_COMPARISON_MATRIX.map((row) => {
-            const copy = up.matrixRows[row.id];
-            const accessBadge = up.accessBadges[row.accessKind];
-            const badgeStyle =
-              row.accessKind === 'free_included'
-                ? 'bg-[#8FA89B]/18 text-[#3D5E49]'
-                : row.accessKind === 'premium_enhanced'
-                  ? 'bg-[#EFEDF5] text-[#5B527E]'
-                  : 'bg-[#F5E8E7] text-[#B45A4C]';
-
-            return (
-              <div
-                key={row.id}
-                className="rounded-2xl bg-[#FDFBFA] border border-[#292832]/[0.05] p-3 space-y-1.5"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-[#292832] leading-snug">
-                    {copy.label}
-                  </span>
-                  <span
-                    className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-lg shrink-0 ${badgeStyle}`}
-                  >
-                    {accessBadge}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] pt-0.5">
-                  <div className="rounded-xl bg-white px-2.5 py-1.5 border border-[#292832]/[0.04]">
-                    <div className="text-[9.5px] font-medium text-[#85838D]">{up.colFree}</div>
-                    <div className="font-medium text-[#292832]/85 mt-0.5 leading-snug">
-                      {copy.free}
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-[#EFEDF5]/50 px-2.5 py-1.5 border border-[#9B93B8]/20">
-                    <div className="text-[9.5px] font-medium text-[#5B527E]">
-                      {up.colPremium}
-                    </div>
-                    <div className="font-semibold text-[#292832] mt-0.5 leading-snug">
-                      {copy.premium}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Couple Widget Preview (Locked on Free, Interactive on Couple Premium) */}
-      {capabilities.canUseCoupleWidgets && widgetSummaryData && onChangeWidgetStyle ? (
-        <section
-          aria-label={t.profile.widgetPreviewTitle}
-          className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3"
-        >
-          <div className="flex items-start justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-[#E88C7D]" strokeWidth={2} />
-              <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
-                {t.profile.widgetPreviewTitle}
-              </h2>
-            </div>
-            <span className="text-[10px] font-semibold text-[#706794] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
-              {t.profile.widgetPreviewBadge}
-            </span>
-          </div>
-          <p className="text-[11.5px] text-[#85838D] leading-snug">{t.profile.widgetPreviewDesc}</p>
-
-          <div className="flex flex-wrap gap-1.5">
-            {WIDGET_STYLE_OPTIONS.map((styleKey) => {
-              const active = widgetStyle === styleKey;
-              return (
-                <button
-                  key={styleKey}
-                  type="button"
-                  onClick={() => onChangeWidgetStyle(styleKey)}
-                  className={`min-h-[30px] px-2.5 py-1 rounded-xl text-[10.5px] font-semibold transition-all ${
-                    active
-                      ? 'bg-[#292832] text-white'
-                      : 'bg-[#F4EFEA] text-[#85838D] hover:text-[#292832]'
-                  }`}
-                >
-                  {t.profile.widgetStyles[styleKey]}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="rounded-[20px] bg-gradient-to-br from-[#FBF7F5] via-white to-[#EFEDF5] p-3.5 border border-[#9B93B8]/25 shadow-inner space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-semibold text-[#706794]">
-              <span>DualCharge · {t.profile.widgetStyles[widgetStyle]}</span>
-              <Lock className="w-3 h-3 text-[#8FA89B]" />
-            </div>
-
-            {widgetStyle === 'shared_energy' && (
-              <div className="flex items-center justify-between gap-2 pt-0.5">
-                <div>
-                  <div className="text-[13px] font-bold text-[#292832]">
-                    {widgetSummaryData.meName}: {widgetSummaryData.meEnergy}/100
-                  </div>
-                  <div className="text-[11px] text-[#85838D]">
-                    {widgetSummaryData.partnerSharing.energy
-                      ? `${widgetSummaryData.partnerName}: ${widgetSummaryData.partnerEnergy}/100`
-                      : `${widgetSummaryData.partnerName}: ${t.home.sharingPaused}`}
-                  </div>
-                </div>
-                <span className="text-[10.5px] font-medium text-[#5B527E] bg-white/80 px-2 py-1 rounded-xl">
-                  {t.profile.widgetMockCopy.sharedEnergySub}
-                </span>
-              </div>
-            )}
-
-            {widgetStyle === 'care_reminder' && (
-              <div>
-                <div className="text-[13px] font-bold text-[#292832]">
-                  {t.profile.widgetMockCopy.careReminderTitle}
-                </div>
-                <div className="text-[11px] text-[#85838D]">
-                  {t.profile.widgetMockCopy.careReminderSub}
-                </div>
-              </div>
-            )}
-
-            {widgetStyle === 'daily_goal' && (
-              <div>
-                <div className="text-[13px] font-bold text-[#292832]">
-                  {t.profile.widgetMockCopy.dailyGoalTitle}
-                </div>
-                <div className="text-[11px] text-[#85838D]">
-                  {t.profile.widgetMockCopy.dailyGoalSub}
-                </div>
-              </div>
-            )}
-
-            {widgetStyle === 'date_countdown' && (
-              <div>
-                <div className="text-[13px] font-bold text-[#292832]">
-                  {t.profile.widgetMockCopy.dateCountdownTitle}
-                </div>
-                <div className="text-[11px] text-[#85838D]">
-                  {t.profile.widgetMockCopy.dateCountdownSub}
-                </div>
-              </div>
-            )}
-
-            <div className="text-[10px] text-[#85838D] pt-1 border-t border-[#292832]/[0.05]">
-              {t.profile.widgetMockCopy.sensitiveHiddenNote}
-            </div>
-          </div>
-        </section>
-      ) : (
-        <PremiumFeaturePreview
-          badgeLabel={t.profile.widgetPreviewBadge}
-          title={up.widgetLockedTitle}
-          description={up.widgetLockedDesc}
-          benefits={up.widgetLockedBenefits}
-          upgradeLabel={up.upgradeCta}
-          onUpgrade={scope === 'demo' ? onOpenReviewModal : onEnterDemo ?? onBack}
-        />
-      )}
-    </div>
-  );
-}
-
-function NormalProfileContent() {
+function NormalProfileContent({
+  titleOverride,
+  onBackOverride,
+}: {
+  titleOverride?: string;
+  onBackOverride?: () => void;
+}) {
   const {
     language,
     setLanguage,
@@ -1095,9 +650,9 @@ function NormalProfileContent() {
     normalBaseline,
     normalInteractions,
     normalLearnedProfile,
-    normalProfileSubView,
-    setNormalProfileSubView,
+    openNormalPremiumMembership,
     setNormalActivePage,
+    returnFromNormalProfile,
     pairNormalLocalPartner,
     toggleNormalSharing,
     updateNormalNotificationPrefs,
@@ -1128,7 +683,6 @@ function NormalProfileContent() {
   const normalCapabilities = getMembershipCapabilities(normalMembership, isCoupleLinked);
 
   const [newTagInput, setNewTagInput] = useState('');
-  const [billingPlan, setBillingPlan] = useState<CoupleBillingPlan>('monthly');
   const [showResetNormalConfirm, setShowResetNormalConfirm] = useState(false);
   const [sharingNotice, setSharingNotice] = useState<string | null>(null);
 
@@ -1152,58 +706,13 @@ function NormalProfileContent() {
 
   return (
     <div className="space-y-4 pb-2 relative">
-      {/* Sub-view Bar: My Profile | Premium Membership */}
-      <div
-        role="tablist"
-        aria-label={t.profile.membershipTitle}
-        className="grid grid-cols-2 gap-1 p-1 bg-[#EFEDF5]/80 rounded-2xl"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={normalProfileSubView === 'main'}
-          onClick={() => setNormalProfileSubView('main')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 px-2 ${
-            normalProfileSubView === 'main'
-              ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
-              : 'text-[#85838D] hover:text-[#292832]'
-          }`}
-        >
-          {t.profile.membershipUpgrade.subTabMain}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={normalProfileSubView === 'premium'}
-          onClick={() => setNormalProfileSubView('premium')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 px-2 ${
-            normalProfileSubView === 'premium'
-              ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
-              : 'text-[#85838D] hover:text-[#292832]'
-          }`}
-        >
-          <Crown className="w-3.5 h-3.5 text-[#9B93B8]" />
-          <span className="truncate">{t.profile.membershipUpgrade.subTabMembership}</span>
-        </button>
-      </div>
+      <SubpageHeader
+        title={titleOverride ?? t.ia.profile.pageTitle}
+        backLabel={t.ia.back}
+        onBack={onBackOverride ?? returnFromNormalProfile}
+      />
 
-      {normalProfileSubView === 'premium' ? (
-        <MembershipComparisonView
-          scope="normal"
-          membership={normalMembership}
-          isCoupleLinked={isCoupleLinked}
-          billingPlan={billingPlan}
-          onChangeBillingPlan={setBillingPlan}
-          onBack={() => setNormalProfileSubView('main')}
-          onOpenReviewModal={() => {}}
-          onEnterDemo={enterPresentationDemo}
-          justUpgraded={false}
-          memberNames={{ a: displayName, b: partnerDisplayName }}
-          t={t}
-        />
-      ) : (
-        <>
-          {/* 1. Personal Information */}
+      {/* 1. Personal Information */}
       <section
         aria-label={displayName}
         className="bg-white/85 backdrop-blur-[10px] ring-1 ring-white/80 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex items-center gap-3.5"
@@ -1401,7 +910,7 @@ function NormalProfileContent() {
         prefs={myNotifPrefs}
         onUpdate={updateNormalNotificationPrefs}
         canUseAdvancedNotifications={normalCapabilities.canUseAdvancedNotifications}
-        onUpgrade={() => setNormalProfileSubView('premium')}
+        onUpgrade={openNormalPremiumMembership}
         t={t}
       />
 
@@ -1505,7 +1014,7 @@ function NormalProfileContent() {
       <LearnedPreferencesSection
         profile={normalLearnedProfile}
         canUseAdvancedLearning={normalCapabilities.canUseAdvancedFeedbackLearning}
-        onUpgrade={() => setNormalProfileSubView('premium')}
+        onUpgrade={openNormalPremiumMembership}
         onClear={clearNormalLearnedPreferences}
         t={t}
       />
@@ -1609,37 +1118,6 @@ function NormalProfileContent() {
         </div>
       </section>
 
-      {/* 7. Membership Summary Card */}
-      <section
-        aria-label={t.profile.membershipTitle}
-        className="bg-gradient-to-br from-white via-[#FDFBFA] to-[#EFEDF5]/65 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] ring-1 ring-[#9B93B8]/25 space-y-2.5"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Crown className="w-4 h-4 text-[#9B93B8]" strokeWidth={2} />
-            <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
-              {t.profile.membershipUpgrade.freeStatusTitle}
-            </h2>
-          </div>
-          <span className="text-[10px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
-            {t.profile.oneCouplePlanBadge}
-          </span>
-        </div>
-        <p className="text-[11.5px] text-[#85838D] leading-snug">
-          {t.profile.membershipUpgrade.freeStatusDesc}
-        </p>
-        <button
-          type="button"
-          onClick={() => setNormalProfileSubView('premium')}
-          className="w-full min-h-[42px] px-3.5 rounded-2xl bg-[#9B93B8] hover:bg-[#8A81AC] text-white text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 transition-all active:scale-95"
-        >
-          <Crown className="w-3.5 h-3.5" />
-          <span>{t.profile.membershipUpgrade.openMembershipPageBtn}</span>
-        </button>
-      </section>
-        </>
-      )}
-
       {showResetNormalConfirm && (
         <div
           role="dialog"
@@ -1693,7 +1171,15 @@ function NormalProfileContent() {
   );
 }
 
-function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
+function PresentationProfileContent({
+  partnerId,
+  titleOverride,
+  onBackOverride,
+}: {
+  partnerId: PartnerId;
+  titleOverride?: string;
+  onBackOverride?: () => void;
+}) {
   const {
     language,
     setLanguage,
@@ -1714,18 +1200,12 @@ function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
     learnedProfileForPartner,
     clearLearnedPreferences,
     setActivePage,
-    profileSubViews,
-    setProfileSubView,
+    openPremiumMembership,
+    returnFromProfile,
     membership,
-    upgradeDemoPremium,
-    widgetPreviewStyle,
-    setWidgetPreviewStyle,
   } = useDualCharge();
 
   const [newTagInput, setNewTagInput] = useState('');
-  const [billingPlan, setBillingPlan] = useState<CoupleBillingPlan>(membership.plan);
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [justUpgraded, setJustUpgraded] = useState(false);
   const [sharingNotice, setSharingNotice] = useState<string | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
@@ -1741,16 +1221,12 @@ function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
   const me = presentationBundle.partnerProfiles[partnerId];
   const meMeta = presentationBundle.partnerMeta[partnerId];
   const partnerMeta = presentationBundle.partnerMeta[otherPartnerId];
-  const partnerProfile = presentationBundle.partnerProfiles[otherPartnerId];
   const capabilities = getMembershipCapabilities(membership, true);
-  const activeSubView = profileSubViews[partnerId];
 
   const mySharing = sharingPrefs[partnerId];
-  const partnerSharing = sharingPrefs[otherPartnerId];
   const myTags = carePreferences[partnerId];
   const myHealth = healthSyncState[partnerId];
   const myNotifPrefs = notificationPrefs[partnerId];
-  const activeWidgetStyle = widgetPreviewStyle[partnerId];
 
   const handleToggleSharing = (key: SharingPrefKey, label: string) => {
     const nextState = !mySharing[key];
@@ -1780,85 +1256,18 @@ function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
     setNewTagInput('');
   };
 
-  const handleConfirmPurchase = () => {
-    upgradeDemoPremium(partnerId, billingPlan);
-    setShowPremiumModal(false);
-    setJustUpgraded(true);
-  };
-
-  const activatedByName = membership.purchasedBy
-    ? presentationBundle.partnerMeta[membership.purchasedBy].display_name
-    : null;
-
   return (
     <div className="space-y-4 pb-2 relative">
-      {/* Sub-view Bar: My Profile | Premium Membership */}
-      <div
-        role="tablist"
-        aria-label={t.profile.membershipTitle}
-        className="grid grid-cols-2 gap-1 p-1 bg-[#EFEDF5]/80 rounded-2xl"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeSubView === 'main'}
-          onClick={() => setProfileSubView(partnerId, 'main')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 px-2 ${
-            activeSubView === 'main'
-              ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
-              : 'text-[#85838D] hover:text-[#292832]'
-          }`}
-        >
-          {t.profile.membershipUpgrade.subTabMain}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeSubView === 'premium'}
-          onClick={() => setProfileSubView(partnerId, 'premium')}
-          className={`min-h-[38px] rounded-xl text-[12px] font-semibold transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5 px-2 ${
-            activeSubView === 'premium'
-              ? 'bg-white text-[#292832] shadow-[0_4px_12px_-4px_rgba(41,40,50,0.08)]'
-              : 'text-[#85838D] hover:text-[#292832]'
-          }`}
-        >
-          <Crown className="w-3.5 h-3.5 text-[#9B93B8]" />
-          <span className="truncate">{t.profile.membershipUpgrade.subTabMembership}</span>
-        </button>
-      </div>
+      <SubpageHeader
+        title={titleOverride ?? t.ia.profile.pageTitle}
+        backLabel={t.ia.back}
+        onBack={onBackOverride ?? (() => returnFromProfile(partnerId))}
+      />
 
-      {activeSubView === 'premium' ? (
-        <MembershipComparisonView
-          scope="demo"
-          membership={membership}
-          isCoupleLinked={true}
-          billingPlan={billingPlan}
-          onChangeBillingPlan={setBillingPlan}
-          onBack={() => setProfileSubView(partnerId, 'main')}
-          onOpenReviewModal={() => setShowPremiumModal(true)}
-          justUpgraded={justUpgraded}
-          memberNames={{
-            a: presentationBundle.partnerMeta.alex.display_name,
-            b: presentationBundle.partnerMeta.jamie.display_name,
-            activatedBy: activatedByName,
-          }}
-          widgetStyle={activeWidgetStyle}
-          onChangeWidgetStyle={(style) => setWidgetPreviewStyle(partnerId, style)}
-          widgetSummaryData={{
-            meName: meMeta.display_name,
-            meEnergy: me.latestEnergy,
-            partnerName: partnerMeta.display_name,
-            partnerEnergy: partnerProfile.latestEnergy,
-            partnerSharing,
-          }}
-          t={t}
-        />
-      ) : (
-        <>
-          <section
-            aria-label={meMeta.display_name}
-            className="bg-white/85 backdrop-blur-[10px] ring-1 ring-white/80 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex items-center gap-3.5"
-          >
+      <section
+        aria-label={meMeta.display_name}
+        className="bg-white/85 backdrop-blur-[10px] ring-1 ring-white/80 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex items-center gap-3.5"
+      >
         <img
           src={me.avatarUrl}
           alt={meMeta.display_name}
@@ -2050,7 +1459,7 @@ function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
         prefs={myNotifPrefs}
         onUpdate={(patch) => updateNotificationPrefs(partnerId, patch)}
         canUseAdvancedNotifications={capabilities.canUseAdvancedNotifications}
-        onUpgrade={() => setProfileSubView(partnerId, 'premium')}
+        onUpgrade={() => openPremiumMembership(partnerId)}
         t={t}
       />
 
@@ -2111,7 +1520,7 @@ function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
       <LearnedPreferencesSection
         profile={learnedProfileForPartner(partnerId)}
         canUseAdvancedLearning={capabilities.canUseAdvancedFeedbackLearning}
-        onUpgrade={() => setProfileSubView(partnerId, 'premium')}
+        onUpgrade={() => openPremiumMembership(partnerId)}
         onClear={() => clearLearnedPreferences(partnerId)}
         t={t}
       />
@@ -2166,157 +1575,29 @@ function PresentationProfileContent({ partnerId }: { partnerId: PartnerId }) {
           })}
         </div>
       </section>
-
-      {/* Membership Status Summary Card on Profile Main */}
-      <section
-        aria-label={t.profile.membershipTitle}
-        className={`rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5 ${
-          capabilities.isPremium
-            ? 'bg-gradient-to-br from-[#FBF7F5] via-white to-[#EFEDF5] ring-1 ring-[#9B93B8]/35'
-            : 'bg-gradient-to-br from-white via-[#FDFBFA] to-[#EFEDF5]/65 ring-1 ring-[#9B93B8]/25'
-        }`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Crown
-              className={`w-4 h-4 ${
-                capabilities.isPremium ? 'text-[#E88C7D]' : 'text-[#9B93B8]'
-              }`}
-              strokeWidth={2}
-            />
-            <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
-              {capabilities.isPremium
-                ? t.profile.membershipUpgrade.premiumStatusTitle
-                : t.profile.membershipUpgrade.freeStatusTitle}
-            </h2>
-          </div>
-          <span className="text-[10px] font-semibold text-[#5B527E] bg-[#EFEDF5] px-2 py-0.5 rounded-lg">
-            {t.profile.oneCouplePlanBadge}
-          </span>
-        </div>
-
-        <p className="text-[11.5px] text-[#85838D] leading-snug">
-          {capabilities.isPremium
-            ? t.profile.membershipUpgrade.premiumStatusDesc
-            : t.profile.membershipUpgrade.freeStatusDesc}
-        </p>
-
-        <button
-          type="button"
-          onClick={() => setProfileSubView(partnerId, 'premium')}
-          className="w-full min-h-[42px] px-3.5 rounded-2xl bg-[#9B93B8] hover:bg-[#8A81AC] text-white text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 transition-all active:scale-95"
-        >
-          <Crown className="w-3.5 h-3.5" />
-          <span>{t.profile.membershipUpgrade.openMembershipPageBtn}</span>
-        </button>
-      </section>
-        </>
-      )}
-
-      {/* Review Upgrade & Confirm Simulated Purchase Modal */}
-      {showPremiumModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="premium-modal-title"
-          className="fixed inset-0 z-40 flex items-end justify-center bg-[#292832]/30 backdrop-blur-[2px] p-3"
-        >
-          <div className="w-full bg-white/95 backdrop-blur-[10px] rounded-[24px] p-4 shadow-xl border border-white space-y-3 max-h-[90%] overflow-y-auto">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Crown className="w-4 h-4 text-[#9B93B8]" />
-                <h3
-                  id="premium-modal-title"
-                  className="font-display text-[15px] font-semibold text-[#292832]"
-                >
-                  {t.profile.membershipUpgrade.reviewModalTitle}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPremiumModal(false)}
-                aria-label={t.profile.closePreview}
-                className="min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center text-[#85838D] hover:bg-[#F4EFEA] active:scale-95 transition-all"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="rounded-2xl bg-[#FDFBFA] border border-[#292832]/[0.06] divide-y divide-[#292832]/[0.05] text-[12px]">
-              <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-[#85838D]">
-                  {t.profile.membershipUpgrade.reviewPlanLabel}
-                </span>
-                <span className="font-semibold text-[#292832]">
-                  {t.profile.premiumPlanTitle}
-                </span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-[#85838D]">
-                  {t.profile.membershipUpgrade.reviewBillingLabel}
-                </span>
-                <span className="font-semibold text-[#292832]">
-                  {billingPlan === 'monthly'
-                    ? t.profile.billingMonthlyLabel
-                    : t.profile.billingYearlyLabel}
-                </span>
-              </div>
-              <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-[#85838D]">
-                  {t.profile.membershipUpgrade.reviewPriceLabel}
-                </span>
-                <span className="font-bold text-[#5B527E]">
-                  {billingPlan === 'monthly'
-                    ? COUPLE_PROPOSED_PRICING.monthlyLabel
-                    : COUPLE_PROPOSED_PRICING.yearlyLabel}{' '}
-                  <span className="text-[11px] font-normal text-[#85838D]">
-                    {billingPlan === 'monthly' ? t.profile.monthlyUnit : t.profile.yearlyUnit}
-                  </span>
-                </span>
-              </div>
-              <div className="px-3 py-2.5 space-y-0.5">
-                <div className="text-[11px] text-[#85838D]">
-                  {t.profile.membershipUpgrade.reviewSharedLabel}
-                </div>
-                <div className="font-semibold text-[#3D5E49]">
-                  {formatTemplate(t.profile.membershipUpgrade.reviewSharedValue, {
-                    a: presentationBundle.partnerMeta.alex.display_name,
-                    b: presentationBundle.partnerMeta.jamie.display_name,
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-[#F4EFEA]/80 p-2.5 text-[11px] text-[#85838D] leading-snug">
-              {t.profile.membershipUpgrade.reviewNoPaymentNote}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPremiumModal(false)}
-                className="min-h-[42px] px-4 rounded-2xl bg-[#F4EFEA] text-[#292832] text-[12px] font-semibold active:scale-95 transition-transform"
-              >
-                {t.meta.cancel}
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmPurchase}
-                className="flex-1 min-h-[42px] px-3 rounded-2xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[12px] font-semibold transition-all duration-200 active:scale-95"
-              >
-                {t.profile.membershipUpgrade.confirmPurchaseBtn}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-export function ProfilePage({ partnerId, scope = 'demo' }: ProfilePageProps) {
+export function ProfilePage({
+  partnerId,
+  scope = 'demo',
+  titleOverride,
+  onBackOverride,
+}: ProfilePageProps) {
   if (scope === 'normal') {
-    return <NormalProfileContent />;
+    return (
+      <NormalProfileContent
+        titleOverride={titleOverride}
+        onBackOverride={onBackOverride}
+      />
+    );
   }
-  return <PresentationProfileContent partnerId={partnerId} />;
+  return (
+    <PresentationProfileContent
+      partnerId={partnerId}
+      titleOverride={titleOverride}
+      onBackOverride={onBackOverride}
+    />
+  );
 }

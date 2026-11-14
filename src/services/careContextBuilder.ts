@@ -193,6 +193,7 @@ export function buildPresentationCareContext(
       activityShared: recipientSharing.activity,
       cycleShared,
       insufficientHistoricalData: !recipientSharing.energy || analytics.recordCount < 7,
+      canShowFutureForecast: Boolean(recipientSharing.energy && analytics.recordCount >= 7),
       recordedDaysCount: recipientSharing.energy ? analytics.recordCount : 0,
       ...(recipientSharing.energy
         ? {
@@ -206,8 +207,10 @@ export function buildPresentationCareContext(
               hasPattern: analytics.pattern.hasPattern,
               detectedWeekdayIndex: analytics.pattern.detectedWeekdayIndex,
               weekdayMean: analytics.pattern.weekdayMean,
+              dropFromOverall: analytics.pattern.dropFromOverall,
               observationCount: analytics.pattern.observationCount,
               qualifyingWeeks: analytics.pattern.qualifyingWeeks,
+              percentageBelowBaseline: analytics.pattern.percentageBelowBaseline,
             },
             upcomingForecast: analytics.forecast7Days.map((day) => ({
               dateISO: day.dateISO,
@@ -423,6 +426,7 @@ export function buildNormalCareContext(
       sleepShared: false,
       activityShared: false,
       insufficientHistoricalData: normalBaseline.recordedDaysCount < 7,
+      canShowFutureForecast: Boolean(energyAuthorized && normalBaseline.canShowFutureForecast),
       baselinePhase: normalBaseline.phase,
       recordedDaysCount: normalBaseline.recordedDaysCount,
       ...(recentRecords ? { recentEnergyRecords: recentRecords } : {}),

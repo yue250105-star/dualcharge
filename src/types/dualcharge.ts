@@ -19,6 +19,30 @@ export type CanonicalPartnerId = 'partner_a' | 'partner_b';
 
 export type AppPage = 'home' | 'insights' | 'care' | 'notifications' | 'profile';
 
+export type InsightsSubView =
+  | 'overview'
+  | 'trends'
+  | 'patterns'
+  | 'forecast'
+  | 'methodology';
+
+export type CareScenarioView =
+  | 'now'
+  | 'plan_ahead'
+  | 'date_planning'
+  | 'surprise'
+  | 'detail';
+
+export type NotificationsCategoryView =
+  | 'overview'
+  | 'invitations'
+  | 'care_updates'
+  | 'orders'
+  | 'moments'
+  | 'detail'
+  | 'membership'
+  | 'settings';
+
 export type CheckInOption = 'good' | 'tired' | 'rest';
 
 export type NotificationStatus = 'Sent' | 'Received' | 'Completed';
@@ -500,12 +524,20 @@ export interface DatePlanSuggestion {
   availabilityNote: string;
 }
 
+export interface DatePlanAlternativeProposal {
+  proposedBy: PartnerId;
+  slotLabel: string;
+  note?: string;
+  updatedAtTime: string;
+}
+
 export interface DatePlanInteraction {
   planId: string;
   reactionByPartner: Partial<Record<PartnerId, 'like' | 'skip'>>;
   invitedBy?: PartnerId;
   invitee?: PartnerId;
   status: DatePlanInviteStatus;
+  alternativeTimeProposal?: DatePlanAlternativeProposal;
   updatedAtISO: string;
   updatedTimeLabel: string;
 }

@@ -54,6 +54,10 @@ export function sanitizeContextForGemini(context: AiCareRequestContext): AiCareR
     activityShared: activityAllowed,
     cycleShared: cycleAllowed,
     insufficientHistoricalData: !energyAllowed || Boolean(rec.insufficientHistoricalData),
+    canShowFutureForecast:
+      energyAllowed && !rec.insufficientHistoricalData
+        ? Boolean(rec.canShowFutureForecast ?? true)
+        : false,
     baselinePhase: rec.baselinePhase,
     recordedDaysCount: energyAllowed ? rec.recordedDaysCount : 0,
     dailyCheckInStatus: energyAllowed ? rec.dailyCheckInStatus ?? null : null,
@@ -167,10 +171,10 @@ export function sanitizeContextForGemini(context: AiCareRequestContext): AiCareR
 
 function getLanguageInstruction(language: AiCareRequestContext['language']): string {
   if (language === 'zh-CN') {
-    return 'Write ALL natural-language fields (summary, evidence, title, why, action, suggestedTiming, personalizationReason, defaultMessage, limitations, tags) in Simplified Chinese (简体中文), EXCEPT keep enum fields "category", "confidence", "communicationStyle", "effortLevel" and "actionType" slug in exact English schema enum strings.';
+    return 'Write ALL natural-language fields (summary, planAheadSummary, evidence, evidenceSummary, evidenceDetails, title, why, action, suggestedTiming, personalizationReason, defaultMessage, limitations, tags) in Simplified Chinese (简体中文), EXCEPT keep enum fields "category", "confidence", "communicationStyle", "effortLevel", "timeHorizon", "suggestedDatePlanId", and "actionType" slug in exact English schema enum strings.';
   }
   if (language === 'zh-TW') {
-    return 'Write ALL natural-language fields (summary, evidence, title, why, action, suggestedTiming, personalizationReason, defaultMessage, limitations, tags) in Traditional Chinese (繁體中文), EXCEPT keep enum fields "category", "confidence", "communicationStyle", "effortLevel" and "actionType" slug in exact English schema enum strings.';
+    return 'Write ALL natural-language fields (summary, planAheadSummary, evidence, evidenceSummary, evidenceDetails, title, why, action, suggestedTiming, personalizationReason, defaultMessage, limitations, tags) in Traditional Chinese (繁體中文), EXCEPT keep enum fields "category", "confidence", "communicationStyle", "effortLevel", "timeHorizon", "suggestedDatePlanId", and "actionType" slug in exact English schema enum strings.';
   }
   return 'Write ALL natural-language fields in natural, warm English.';
 }
@@ -178,33 +182,117 @@ function getLanguageInstruction(language: AiCareRequestContext['language']): str
 export function buildCareSystemInstruction(language: AiCareRequestContext['language']): string {
   return [
     'You are the personalized care engine for DualCharge, an AI-powered couple care companion.',
-    'Generate 3 specific, actionable, warm, non-commercial care suggestions tailored to the authorized context.',
+    'Organize care suggestions into TWO complementary time horizons:',
+    'A. "recommendations" (timeHorizon="now"): 3 Care for Now suggestions for today/tonight grounded in current-day energy, confirmed check-in status, authorized recent signals, and partner preferences.',
+    'B. "planAheadRecommendations" (timeHorizon="ahead"): 2 to 3 Plan Ahead suggestions for upcoming days ONLY when energyShared is true, insufficientHistoricalData is false, canShowFutureForecast is true, and upcomingForecast is present. If energyShared is false or insufficientHistoricalData is true or canShowFutureForecast is false, return an EMPTY array [] for planAheadRecommendations.',
     '',
     'CRITICAL RESPONSIBLE INTERPRETATION RULES:',
     '1. Sleep duration/stages, activity minutes/steps, resting heart rate, HRV, menstrual cycle phase, daily check-in labels, and Energy Index ONLY describe general recovery/energy patterns. NEVER claim a person is sad, angry, stressed, anxious, lonely, depressed, or emotionally unstable from physiological or sleep numbers.',
     '2. NEVER diagnose any physical, cardiovascular, hormonal, or mental health condition. Never interpret HRV or resting heart rate as a clinical/medical signal; compare them ONLY against the same individual\'s personal baseline provided in "rhrSummary" or "hrvSummary".',
     '3. NEVER mix SDNN and RMSSD HRV metrics or compare values between partners.',
-    '4. NEVER present an estimated Energy Index or forecast as a guaranteed outcome. Use cautious expressions such as "may need more rest", "might appreciate a quieter pace", or "could benefit from low-pressure support".',
-    '5. Clearly distinguish observed historical records and confirmed daily check-in status from estimated future trends. NEVER invent, extrapolate, or fabricate numbers not present in the provided JSON context.',
+    '4. NEVER present an estimated Energy Index, weekday pattern, or 7-day forecast as a high-confidence or guaranteed outcome (NEVER output confidence="High"). Use cautious expressions such as "may need more rest", "patterns suggest", or "estimated around".',
+    '5. Clearly distinguish observed historical records and confirmed daily check-in status from pattern-based future estimates. NEVER invent, extrapolate, or fabricate numbers not present in the provided JSON context. Never claim a single factor like sleep caused everything.',
     '6. Strict Privacy Scoping: If "energyShared" is false, NEVER mention energy numbers or daily check-in status. If "sleepSummary" is absent (sleepShared is false), NEVER mention sleep duration/stages. If "rhrSummary" or "hrvSummary" or "cycleSummary" is absent, NEVER mention heart rate, HRV, or cycle phase.',
-    '7. Default to non-commercial everyday care (requiresSpendingMoney: false; supportive messages, quiet home time, small chores, homemade warm drink, unhurried walk). When "learnedProfile.negativelyRatedAttributes.avoidPaidSuggestions" is false, at most 1 of the 3 options MAY be a small thoughtful treat purchase (requiresSpendingMoney: true, e.g. purchase_coffee, purchase_dessert, purchase_flowers, or purchase_gift), while keeping non-commercial options primary.',
+    '7. Default to non-commercial everyday care (requiresSpendingMoney: false; supportive messages, quiet home time, small chores, homemade warm drink, unhurried walk). When "learnedProfile.negativelyRatedAttributes.avoidPaidSuggestions" is false, at most 1 option MAY be a small thoughtful treat purchase (requiresSpendingMoney: true, e.g. purchase_coffee, purchase_dessert, purchase_flowers, or purchase_gift), keeping non-commercial options primary.',
     '',
-    'ADAPTIVE PERSONALIZATION & DIVERSITY RULES:',
+    'ADAPTIVE PERSONALIZATION & EVIDENCE RULES:',
     '8. Explicit profile preferences ("carePreferences", "avoidTags", "communicationStyle", and "sharedWeeklyRecharge" when shared) ALWAYS take higher priority than inferred feedback scores.',
-    '9. Use "learnedProfile" (derived from explicit recipient feedback only) transparently: lean toward "preferredCategories", "preferredCommunicationStyles", "preferredActionTypes", and "prefersFreeOrLowCost", and avoid repeating attributes in "negativelyRatedAttributes".',
-    '10. Respect "learnedProfile.learningMaturity": when maturity is "Initial" (<3 feedback events), explicitly keep personalization modest and exploratory — never claim to deeply understand the recipient after only one or two interactions.',
-    '11. Diversity & Anti-Repetition: Each of the 3 recommendations MUST span a distinct "category" and a distinct "actionType" so the batch feels varied and balanced. Do NOT repeat suggestions matching items in "recentSuggestions" or "partner.completedCareTitles" unnecessarily.',
-    '12. Keep output concise: 3 recommendations, each with "action", "why", "suggestedTiming", "personalizationReason", "defaultMessage", and valid structured metadata ("actionType", "communicationStyle", "effortLevel", "requiresSpendingMoney", "tags").',
+    '9. Use "learnedProfile" (derived from explicit recipient feedback only) transparently and respect "learnedProfile.learningMaturity" ("Initial" <3 events = keep exploratory and modest).',
+    '10. Diversity & Anti-Repetition: Each of the 3 "recommendations" (timeHorizon="now") MUST span a distinct "category" and a distinct "actionType". Plan Ahead items should also avoid repeating Care for Now titles.',
+    '11. Evidence Transparency: Populate "evidenceSummary" (1-2 concise sentences) and "evidenceDetails" (2-3 short factual bullets) on each recommendation citing ONLY authorized observed facts, preferences, or explicitly labeled estimates from context.',
+    '12. For "planAheadRecommendations": focus on practical advance prep before recurring lower-energy windows (e.g. Wednesday evening / Thursday afternoon when weekdayPattern shows Thursday dips) OR planning relaxed quality time / dates on higher-energy upcoming days (set "suggestedDatePlanId" to one of "date-warm-tea-vinyl", "date-cozy-movie", "date-evening-walk", "date-slow-cooking", "date-quiet-dinner", "date-half-day-escape" when fitting).',
     getLanguageInstruction(language),
   ].join('\n');
 }
+
+const RECOMMENDATION_ITEM_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    id: { type: Type.STRING },
+    title: { type: Type.STRING },
+    category: {
+      type: Type.STRING,
+      enum: [...AI_CARE_CATEGORIES],
+    },
+    timeHorizon: {
+      type: Type.STRING,
+      enum: ['now', 'ahead'],
+    },
+    why: { type: Type.STRING },
+    action: { type: Type.STRING },
+    suggestedTiming: { type: Type.STRING },
+    personalizationReason: { type: Type.STRING },
+    evidenceSummary: {
+      type: Type.STRING,
+      description: '1-2 concise sentences linking suggestion to authorized observations, preferences, or labeled estimates.',
+    },
+    evidenceDetails: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: '2-3 short bullets distinguishing observed history vs pattern-based estimates.',
+    },
+    targetWeekdayIndex: { type: Type.INTEGER },
+    targetDateISO: { type: Type.STRING },
+    suggestedDatePlanId: { type: Type.STRING },
+    confidence: {
+      type: Type.STRING,
+      enum: [...AI_CARE_CONFIDENCES],
+    },
+    defaultMessage: {
+      type: Type.STRING,
+      description: 'Short warm message the partner can send or customize.',
+    },
+    actionType: {
+      type: Type.STRING,
+      description:
+        'Short snake_case slug for the care action, e.g. warm_drink, quiet_evening, supportive_message, evening_walk, handwritten_note, chore_help, voice_check_in, light_meal.',
+    },
+    communicationStyle: {
+      type: Type.STRING,
+      enum: [...AI_CARE_COMMUNICATION_STYLES],
+    },
+    effortLevel: {
+      type: Type.STRING,
+      enum: [...AI_CARE_EFFORT_LEVELS],
+    },
+    requiresSpendingMoney: {
+      type: Type.BOOLEAN,
+    },
+    tags: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+  },
+  required: [
+    'id',
+    'title',
+    'category',
+    'timeHorizon',
+    'why',
+    'action',
+    'suggestedTiming',
+    'personalizationReason',
+    'evidenceSummary',
+    'confidence',
+    'defaultMessage',
+    'actionType',
+    'communicationStyle',
+    'effortLevel',
+    'requiresSpendingMoney',
+    'tags',
+  ],
+};
 
 const CARE_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     summary: {
       type: Type.STRING,
-      description: 'Brief 1-sentence overview of the recipient context and care focus.',
+      description: 'Brief 1-sentence overview of the recipient current care context.',
+    },
+    planAheadSummary: {
+      type: Type.STRING,
+      description: 'Brief 1-sentence forward-looking note based on historical patterns or upcoming estimates.',
     },
     recipientName: {
       type: Type.STRING,
@@ -218,65 +306,13 @@ const CARE_RESPONSE_SCHEMA = {
     },
     recommendations: {
       type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          id: { type: Type.STRING },
-          title: { type: Type.STRING },
-          category: {
-            type: Type.STRING,
-            enum: [...AI_CARE_CATEGORIES],
-          },
-          why: { type: Type.STRING },
-          action: { type: Type.STRING },
-          suggestedTiming: { type: Type.STRING },
-          personalizationReason: { type: Type.STRING },
-          confidence: {
-            type: Type.STRING,
-            enum: [...AI_CARE_CONFIDENCES],
-          },
-          defaultMessage: {
-            type: Type.STRING,
-            description: 'Short warm message the partner can send or customize.',
-          },
-          actionType: {
-            type: Type.STRING,
-            description:
-              'Short snake_case slug for the care action, e.g. warm_drink, quiet_evening, supportive_message, evening_walk, handwritten_note, chore_help, voice_check_in, light_meal.',
-          },
-          communicationStyle: {
-            type: Type.STRING,
-            enum: [...AI_CARE_COMMUNICATION_STYLES],
-          },
-          effortLevel: {
-            type: Type.STRING,
-            enum: [...AI_CARE_EFFORT_LEVELS],
-          },
-          requiresSpendingMoney: {
-            type: Type.BOOLEAN,
-          },
-          tags: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-        },
-        required: [
-          'id',
-          'title',
-          'category',
-          'why',
-          'action',
-          'suggestedTiming',
-          'personalizationReason',
-          'confidence',
-          'defaultMessage',
-          'actionType',
-          'communicationStyle',
-          'effortLevel',
-          'requiresSpendingMoney',
-          'tags',
-        ],
-      },
+      items: RECOMMENDATION_ITEM_SCHEMA,
+      description: '3 Care for Now (timeHorizon="now") suggestions.',
+    },
+    planAheadRecommendations: {
+      type: Type.ARRAY,
+      items: RECOMMENDATION_ITEM_SCHEMA,
+      description: '2-3 Plan Ahead (timeHorizon="ahead") suggestions, or [] if insufficientHistoricalData or energyShared is false.',
     },
     limitations: {
       type: Type.STRING,
@@ -284,7 +320,14 @@ const CARE_RESPONSE_SCHEMA = {
         'Short responsible-AI note explaining data/confidence limits and that estimates are non-diagnostic.',
     },
   },
-  required: ['summary', 'recipientName', 'evidence', 'recommendations', 'limitations'],
+  required: [
+    'summary',
+    'recipientName',
+    'evidence',
+    'recommendations',
+    'planAheadRecommendations',
+    'limitations',
+  ],
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -331,7 +374,7 @@ export async function generateGeminiCareRecommendations(
     });
 
     const userPrompt = [
-      `Generate 3 distinct personalized care suggestions across 3 different categories (variationSeed=${variationSeed}) for this authorized DualCharge context:`,
+      `Generate 3 distinct Care for Now suggestions (timeHorizon="now") across 3 different categories PLUS 2-3 Plan Ahead suggestions (timeHorizon="ahead", or [] if insufficient historical data or energyShared is false) with variationSeed=${variationSeed} for this authorized DualCharge context:`,
       JSON.stringify(sanitized),
     ].join('\n\n');
 

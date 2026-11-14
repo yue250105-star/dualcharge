@@ -2,14 +2,17 @@ import React, { useEffect, useState } from 'react';
 import {
   Activity,
   ArrowRight,
+  Bell,
   Check,
   Clock,
+  Gift,
   Heart,
   HeartPulse,
   Lock,
   Moon,
   Sparkles,
   Sun,
+  User,
   UserPlus,
   Waves,
   X,
@@ -257,6 +260,9 @@ function NormalHomeContent() {
     submitNormalWeeklyRecharge,
     skipNormalWeeklyRecharge,
     setNormalActivePage,
+    openNormalInsightsSubView,
+    openNormalCareSubView,
+    openNormalNotificationsSubView,
     t,
     language,
   } = useDualCharge();
@@ -289,10 +295,16 @@ function NormalHomeContent() {
   );
 
   const myRecharge = normalInteractions.weeklyRecharge ?? null;
+  const dueOrScheduledRemindersCount = (normalInteractions.careReminders ?? []).filter(
+    (r) => r.status === 'scheduled'
+  ).length;
+  const activeOrdersCount = (normalInteractions.mockOrders ?? []).filter(
+    (o) => o.status !== 'Delivered' && o.status !== 'Cancelled'
+  ).length;
 
   return (
-    <div className="space-y-4 pb-2 relative">
-      {/* Connection + Local Day Indicator */}
+    <div className="space-y-3.5 pb-2 relative">
+      {/* Connection + Date + Quick Profile Chip */}
       <div className="flex items-center justify-between gap-2 px-0.5">
         <div className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[#292832]/85 min-w-0">
           <Heart
@@ -305,39 +317,45 @@ function NormalHomeContent() {
               : t.normalMode.unpairedStatusValue}
           </span>
         </div>
-        <span className="text-[10.5px] text-[#85838D] shrink-0 tabular-nums">{formattedToday}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10.5px] text-[#85838D] tabular-nums">{formattedToday}</span>
+          <button
+            type="button"
+            onClick={() => setNormalActivePage('profile')}
+            className="inline-flex items-center gap-1 rounded-full bg-white/90 border border-[#E9E4DB] px-2 py-0.5 text-[10.5px] font-semibold text-[#292832] hover:bg-[#FAF8F4] active:scale-95 transition"
+          >
+            <User className="w-3 h-3 text-[#706794]" />
+            <span>{t.ia.home.profileShortcutLabel}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Day 1 / Baseline Building Banner */}
+      {/* Compact Baseline Progress Banner */}
       <section
         aria-label={t.normalMode.baselineStartingTitle}
-        className="bg-white/85 backdrop-blur-[10px] ring-1 ring-[#E88C7D]/25 rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+        className="bg-white/85 backdrop-blur-[10px] ring-1 ring-[#E88C7D]/25 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#8E4D42] bg-[#F5E8E7] px-2.5 py-1 rounded-xl">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#8E4D42] bg-[#F5E8E7] px-2.5 py-0.5 rounded-xl">
             {formatTemplate(t.normalMode.dayBadgeTemplate, { day: currentDayNumber })}
           </span>
-          <span className="text-[11px] font-semibold text-[#706794]">
-            {phase === 'building'
-              ? t.normalMode.baselineBuildingBadge
-              : t.normalMode.earlyBaselineBadge}
-          </span>
+          <button
+            type="button"
+            onClick={() => openNormalInsightsSubView('trends')}
+            className="text-[11px] font-semibold text-[#706794] hover:underline"
+          >
+            {t.ia.home.viewTrendsShortcut}
+          </button>
         </div>
 
-        <h1 className="font-display text-[16px] font-bold text-[#292832] leading-snug">
+        <h1 className="font-display text-[15px] font-bold text-[#292832] leading-snug">
           {phase === 'building'
             ? t.normalMode.baselineStartingTitle
             : t.normalMode.earlyInsightTitle}
         </h1>
 
-        <p className="text-[12px] text-[#85838D] leading-relaxed">
-          {phase === 'building'
-            ? t.normalMode.baselineStartingBody
-            : formatTemplate(t.normalMode.earlyInsightSubtitle, { count: recordedDaysCount })}
-        </p>
-
-        <div className="pt-1 space-y-1.5">
-          <div className="flex items-center justify-between text-[11.5px] font-semibold text-[#292832] tabular-nums">
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-[#292832] tabular-nums">
             <span>
               {formatTemplate(t.normalMode.recordedDaysProgress, {
                 count: recordedDaysCount,
@@ -346,23 +364,22 @@ function NormalHomeContent() {
             </span>
             <span className="text-[#85838D]">{progressPct}%</span>
           </div>
-          <div className="h-2 w-full rounded-full bg-[#F4EFEA] overflow-hidden">
+          <div className="h-1.5 w-full rounded-full bg-[#F4EFEA] overflow-hidden">
             <div
               className="h-full rounded-full bg-gradient-to-r from-[#E88C7D] to-[#9B93B8] transition-all duration-300"
               style={{ width: `${Math.max(progressPct, recordedDaysCount > 0 ? 8 : 0)}%` }}
             />
           </div>
-          {phase === 'building' && (
-            <p className="text-[11px] text-[#85838D] leading-snug pt-0.5">
-              {t.normalMode.firstInsightTimingNote}
-            </p>
-          )}
         </div>
       </section>
 
-      {/* Couple Energy Cards: Personal Baseline Status + Partner Empty/Waiting State */}
+      {/* Tappable Couple Energy Cards */}
       <section aria-label={t.home.myEnergy} className="grid grid-cols-2 gap-3">
-        <div className="bg-white/78 backdrop-blur-[10px] ring-1 ring-white/85 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between">
+        <button
+          type="button"
+          onClick={() => openNormalInsightsSubView('trends')}
+          className="text-left bg-white/78 backdrop-blur-[10px] ring-1 ring-white/85 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between hover:ring-[#E88C7D]/35 active:scale-[0.98] transition"
+        >
           <div>
             <div className="flex items-center justify-between gap-1">
               <span className="text-[11px] font-semibold text-[#292832] truncate">
@@ -379,8 +396,8 @@ function NormalHomeContent() {
             </div>
           </div>
 
-          <div className="my-3 flex flex-col items-center justify-center text-center">
-            <div className="w-[72px] h-[72px] rounded-full border-[3px] border-dashed border-[#E88C7D]/45 bg-[#FDFBFA] flex flex-col items-center justify-center">
+          <div className="my-2.5 flex flex-col items-center justify-center text-center">
+            <div className="w-[68px] h-[68px] rounded-full border-[3px] border-dashed border-[#E88C7D]/45 bg-[#FDFBFA] flex flex-col items-center justify-center">
               <span className="font-display text-[15px] font-bold text-[#292832] tabular-nums leading-none">
                 {earlyInsight ? earlyInsight.averageScore1To5 : `${recordedDaysCount}/7`}
               </span>
@@ -397,7 +414,7 @@ function NormalHomeContent() {
               ? t.home.checkInOptions[todayRecord.checkInStatus].label
               : t.home.pendingCheckIn}
           </div>
-        </div>
+        </button>
 
         <div className="bg-[#FDFBFA]/75 backdrop-blur-[10px] ring-1 ring-[#9B93B8]/20 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between text-center">
           <div>
@@ -417,8 +434,8 @@ function NormalHomeContent() {
           </div>
 
           {normalPairing.status === 'unpaired' ? (
-            <div className="my-2.5 flex flex-col items-center justify-center space-y-2">
-              <div className="w-9 h-9 rounded-full bg-[#EFEDF5] flex items-center justify-center">
+            <div className="my-2 flex flex-col items-center justify-center space-y-2">
+              <div className="w-8 h-8 rounded-full bg-[#EFEDF5] flex items-center justify-center">
                 <UserPlus className="w-4 h-4 text-[#706794]" strokeWidth={1.8} />
               </div>
               <div className="text-[11px] font-semibold text-[#292832] leading-snug">
@@ -433,8 +450,8 @@ function NormalHomeContent() {
               </button>
             </div>
           ) : (
-            <div className="my-3 flex flex-col items-center justify-center space-y-2 px-1">
-              <div className="w-9 h-9 rounded-full bg-[#EFEDF5] flex items-center justify-center">
+            <div className="my-2.5 flex flex-col items-center justify-center space-y-2 px-1">
+              <div className="w-8 h-8 rounded-full bg-[#EFEDF5] flex items-center justify-center">
                 <Clock className="w-4 h-4 text-[#706794]" strokeWidth={1.8} />
               </div>
               <div className="text-[11px] text-[#85838D] leading-snug">
@@ -444,6 +461,31 @@ function NormalHomeContent() {
           )}
         </div>
       </section>
+
+      {/* Active Reminders / Orders Shortcut */}
+      {(dueOrScheduledRemindersCount > 0 || activeOrdersCount > 0) && (
+        <button
+          type="button"
+          onClick={() => openNormalCareSubView('surprise')}
+          className="w-full text-left bg-[#FDF8F5] border border-[#E88C7D]/30 rounded-[20px] p-3 flex items-center justify-between gap-3 hover:bg-[#F9EFE9] active:scale-[0.98] transition"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-8 h-8 rounded-xl bg-[#F5E8E7] text-[#D46B5B] flex items-center justify-center shrink-0">
+              <Gift className="w-4 h-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[12px] font-semibold text-[#292832] truncate">
+                {t.ia.home.remindersShortcutTitle}
+              </div>
+              <div className="text-[10.5px] text-[#85838D]">
+                {dueOrScheduledRemindersCount + activeOrdersCount}{' '}
+                {t.ia.home.remindersShortcutCta}
+              </div>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-[#D46B5B] shrink-0" />
+        </button>
+      )}
 
       {/* Daily Check-in */}
       <section
@@ -625,55 +667,41 @@ function NormalHomeContent() {
         )}
       </section>
 
-      {/* Today's Summary (Never fabricates unentered sleep/activity numbers) */}
+      {/* Today's Summary */}
       <section
         aria-label={t.home.todaysSummary}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3"
+        className="bg-white rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-[15px] font-semibold text-[#292832]">
+          <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
             {t.home.todaysSummary}
           </h2>
-          <span className="text-[11px] text-[#85838D]">{t.home.personalView}</span>
+          <button
+            type="button"
+            onClick={() => openNormalInsightsSubView('trends')}
+            className="text-[11px] font-semibold text-[#706794] hover:underline"
+          >
+            {t.ia.home.viewTrendsShortcut}
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Moon className="w-3.5 h-3.5 text-[#9B93B8]" strokeWidth={2} />
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-[#FDFBFA] rounded-xl p-2.5 border border-[#292832]/[0.04]">
+            <div className="flex items-center gap-1.5 text-[10.5px] text-[#85838D]">
+              <Moon className="w-3 h-3 text-[#9B93B8]" strokeWidth={2} />
               <span>{t.home.sleepDuration}</span>
             </div>
-            <div className="mt-1 font-display text-[12.5px] font-medium text-[#85838D]">
+            <div className="mt-0.5 font-display text-[12px] font-medium text-[#85838D]">
               {t.normalMode.notEnteredYet}
             </div>
           </div>
 
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Sun className="w-3.5 h-3.5 text-[#E88C7D]" strokeWidth={2} />
-              <span>{t.home.sleepQuality}</span>
-            </div>
-            <div className="mt-1 font-display text-[12.5px] font-medium text-[#85838D]">
-              {t.normalMode.notEnteredYet}
-            </div>
-          </div>
-
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Activity className="w-3.5 h-3.5 text-[#8FA89B]" strokeWidth={2} />
-              <span>{t.home.activity}</span>
-            </div>
-            <div className="mt-1 font-display text-[12.5px] font-medium text-[#85838D]">
-              {t.normalMode.notEnteredYet}
-            </div>
-          </div>
-
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Clock className="w-3.5 h-3.5 text-[#85838D]" strokeWidth={2} />
+          <div className="bg-[#FDFBFA] rounded-xl p-2.5 border border-[#292832]/[0.04]">
+            <div className="flex items-center gap-1.5 text-[10.5px] text-[#85838D]">
+              <Clock className="w-3 h-3 text-[#85838D]" strokeWidth={2} />
               <span>{t.home.selfReported}</span>
             </div>
-            <div className="mt-1 font-display text-[13px] font-semibold text-[#292832] truncate">
+            <div className="mt-0.5 font-display text-[12.5px] font-semibold text-[#292832] truncate">
               {todayRecord
                 ? t.home.checkInOptions[todayRecord.checkInStatus].label
                 : t.home.pendingCheckIn}
@@ -682,16 +710,23 @@ function NormalHomeContent() {
         </div>
       </section>
 
-      {/* AI Insight Preview */}
-      <section
-        aria-label={t.home.aiInsightPreview}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+      {/* Tappable AI Insight Preview Card */}
+      <button
+        type="button"
+        onClick={() => openNormalInsightsSubView('patterns')}
+        className="w-full text-left bg-white rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2 hover:ring-1 hover:ring-[#9B93B8]/40 active:scale-[0.99] transition"
       >
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#706794]">
-          <Sparkles className="w-3.5 h-3.5 text-[#9B93B8]" strokeWidth={2} />
-          <span>{t.home.aiInsightPreview}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#706794]">
+            <Sparkles className="w-3.5 h-3.5 text-[#9B93B8]" strokeWidth={2} />
+            <span>{t.home.aiInsightPreview}</span>
+          </div>
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B527E]">
+            {t.ia.home.insightsPreviewCta}
+            <ArrowRight className="w-3 h-3" />
+          </span>
         </div>
-        <p className="text-[13px] text-[#292832] leading-relaxed">
+        <p className="text-[12.5px] text-[#292832] leading-relaxed">
           {earlyInsight
             ? formatTemplate(t.normalMode.insightPreviewEarly, {
                 count: recordedDaysCount,
@@ -699,39 +734,31 @@ function NormalHomeContent() {
               })
             : t.normalMode.insightPreviewBuilding}
         </p>
-        <button
-          type="button"
-          onClick={() => setNormalActivePage('insights')}
-          className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[12px] font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-[#9B93B8]"
-        >
-          <span>{t.home.viewInsights}</span>
-          <ArrowRight className="w-3.5 h-3.5" strokeWidth={2} />
-        </button>
-      </section>
+      </button>
 
-      {/* Recent Care Activity (Strictly Personal Interactions Only) */}
+      {/* Compact Recent Care Activity + Quick Shortcuts */}
       <section
         aria-label={t.home.recentCareActivity}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+        className="bg-white rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-[15px] font-semibold text-[#292832]">
+          <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
             {t.home.recentCareActivity}
           </h2>
           <button
             type="button"
-            onClick={() => setNormalActivePage('care')}
-            className="text-[11.5px] font-semibold text-[#D46B5B] hover:underline min-h-[32px] px-1 active:scale-95 transition-transform"
+            onClick={() => openNormalNotificationsSubView('overview')}
+            className="text-[11px] font-semibold text-[#706794] hover:underline"
           >
-            {t.home.openCare}
+            {t.ia.home.notificationsShortcutCta}
           </button>
         </div>
 
         {normalInteractions.careActivity.length === 0 ? (
-          <p className="text-[12px] text-[#85838D] py-1">{t.normalMode.noCareActivityYet}</p>
+          <p className="text-[12px] text-[#85838D] py-0.5">{t.normalMode.noCareActivityYet}</p>
         ) : (
           <ul className="divide-y divide-[#292832]/[0.05]">
-            {normalInteractions.careActivity.slice(0, 4).map((item) => {
+            {normalInteractions.careActivity.slice(0, 2).map((item) => {
               const title =
                 item.suggestionTitle ||
                 t.normalMode.careSuggestions[item.suggestionId]?.title ||
@@ -790,8 +817,8 @@ function NormalHomeContent() {
                                   });
               return (
                 <li key={item.id} className="py-2 first:pt-0 last:pb-0">
-                  <p className="text-[12.5px] text-[#292832] leading-snug">{text}</p>
-                  <span className="text-[10.5px] text-[#85838D]">
+                  <p className="text-[12px] text-[#292832] leading-snug">{text}</p>
+                  <span className="text-[10px] text-[#85838D]">
                     {item.dateISO} · {item.timeLabel}
                   </span>
                 </li>
@@ -799,6 +826,25 @@ function NormalHomeContent() {
             })}
           </ul>
         )}
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => openNormalCareSubView('now')}
+            className="min-h-[40px] px-3 rounded-xl bg-[#F5E8E7] hover:bg-[#EEDCD9] text-[#B45A4C] text-[11.5px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition"
+          >
+            <span>{t.ia.home.careShortcutCta}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openNormalCareSubView('surprise')}
+            className="min-h-[40px] px-3 rounded-xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[11.5px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition"
+          >
+            <Gift className="w-3.5 h-3.5" />
+            <span className="truncate">{t.ia.care.surprisePageTitle}</span>
+          </button>
+        </div>
       </section>
 
       <WeeklyRechargeModal
@@ -816,6 +862,9 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
   const {
     presentationBundle,
     setActivePage,
+    openInsightsSubView,
+    openCareSubView,
+    openNotificationsSubView,
     dailyCheckIns,
     partnerStatusUpdates,
     setDraftCheckIn,
@@ -826,6 +875,10 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
     skipWeeklyRecharge,
     sharingPrefs,
     careActivity,
+    careReminders,
+    mockOrders,
+    datePlanInteractions,
+    surpriseCareRecords,
     t,
   } = useDualCharge();
 
@@ -997,9 +1050,22 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
     }
   };
 
+  const activeSenderReminders = (careReminders ?? []).filter(
+    (r) => r.ownerId === partnerId && r.status === 'scheduled'
+  ).length;
+  const activeSenderOrders = (mockOrders ?? []).filter(
+    (o) => o.senderId === partnerId && o.status !== 'Delivered' && o.status !== 'Cancelled'
+  ).length;
+  const pendingInvitesCount = Object.values(datePlanInteractions).filter(
+    (item) => item.status === 'invited' && item.invitee === partnerId
+  ).length;
+  const readySurpriseCount = (surpriseCareRecords ?? []).filter(
+    (s) => s.recipientId === partnerId && s.status === 'Scheduled'
+  ).length;
+
   return (
-    <div className="space-y-4 pb-2 relative">
-      {/* Couple Synchronization Header + Subtle Demo Date */}
+    <div className="space-y-3.5 pb-2 relative">
+      {/* Couple Synchronization Header + Date + Quick Profile */}
       <div className="flex items-center justify-between gap-2 px-0.5">
         <div className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[#292832]/85 min-w-0">
           <Heart
@@ -1010,12 +1076,26 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
             {formatTemplate(t.home.connectedWith, { partner: partnerProfile.display_name })}
           </span>
         </div>
-        <span className="text-[10.5px] text-[#85838D] shrink-0">{t.meta.todayDateLabel}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10.5px] text-[#85838D]">{t.meta.todayDateLabel}</span>
+          <button
+            type="button"
+            onClick={() => setActivePage(partnerId, 'profile')}
+            className="inline-flex items-center gap-1 rounded-full bg-white/90 border border-[#E9E4DB] px-2 py-0.5 text-[10.5px] font-semibold text-[#292832] hover:bg-[#FAF8F4] active:scale-95 transition"
+          >
+            <User className="w-3 h-3 text-[#706794]" />
+            <span>{t.ia.home.profileShortcutLabel}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Couple Energy Cards */}
+      {/* Tappable Couple Energy Cards */}
       <section aria-label={t.home.myEnergy} className="grid grid-cols-2 gap-3">
-        <div className="bg-white/78 backdrop-blur-[10px] ring-1 ring-white/85 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between transition-shadow duration-300 hover:shadow-[0_14px_34px_-10px_rgba(41,40,50,0.09)]">
+        <button
+          type="button"
+          onClick={() => openInsightsSubView(partnerId, 'trends')}
+          className="text-left bg-white/78 backdrop-blur-[10px] ring-1 ring-white/85 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between transition duration-200 hover:ring-[#E88C7D]/40 hover:shadow-[0_14px_34px_-10px_rgba(41,40,50,0.09)] active:scale-[0.98]"
+        >
           <div>
             <div className="flex items-center justify-between gap-1">
               <span className="text-[11px] font-semibold text-[#292832] truncate">
@@ -1030,24 +1110,28 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
             </div>
           </div>
 
-          <div className="my-2.5 flex items-center justify-center">
+          <div className="my-2 flex items-center justify-center">
             <CircularEnergyRing
               score={myEnergy}
-              size={76}
+              size={72}
               strokeWidth={6}
               accentVariant="self"
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <BatteryEnergyBar score={myEnergy} />
             <div className={`text-[11px] font-semibold ${myStyle.textColor}`}>
               {t.energyStates[myStyle.stateKey]} · {myEnergy}/100
             </div>
           </div>
-        </div>
+        </button>
 
-        <div className="bg-[#FDFBFA]/72 backdrop-blur-[10px] ring-1 ring-[#9B93B8]/20 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between transition-shadow duration-300 hover:shadow-[0_14px_34px_-10px_rgba(41,40,50,0.09)]">
+        <button
+          type="button"
+          onClick={() => openInsightsSubView(partnerId, 'trends')}
+          className="text-left bg-[#FDFBFA]/72 backdrop-blur-[10px] ring-1 ring-[#9B93B8]/20 rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] flex flex-col justify-between transition duration-200 hover:ring-[#9B93B8]/50 hover:shadow-[0_14px_34px_-10px_rgba(41,40,50,0.09)] active:scale-[0.98]"
+        >
           <div>
             <div className="flex items-center justify-between gap-1">
               <span className="text-[11px] font-semibold text-[#292832] truncate">
@@ -1066,16 +1150,16 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
 
           {partnerSharing.energy ? (
             <>
-              <div className="my-2.5 flex items-center justify-center">
+              <div className="my-2 flex items-center justify-center">
                 <CircularEnergyRing
                   score={partnerEnergy}
-                  size={76}
+                  size={72}
                   strokeWidth={6}
                   accentVariant="partner"
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <BatteryEnergyBar score={partnerEnergy} />
                 <div className={`text-[11px] font-semibold ${partnerStyle.textColor}`}>
                   {t.energyStates[partnerStyle.stateKey]} · {partnerEnergy}/100
@@ -1083,21 +1167,16 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
                 {partnerStatusView.hasConfirmedStatus &&
                   !partnerStatusView.isPrivate &&
                   partnerStatusView.checkInStatus && (
-                    <div className="rounded-xl bg-[#8FA89B]/16 px-2 py-1 text-[10px] text-[#3D5E49] leading-snug">
-                      <div className="font-semibold">
-                        {t.home.latestConfirmedStatusLabel}:{' '}
-                        {t.home.checkInOptions[partnerStatusView.checkInStatus].label}
-                      </div>
-                      {partnerStatusView.updatedAtTime && (
-                        <div className="text-[#85838D]">{partnerStatusView.updatedAtTime}</div>
-                      )}
+                    <div className="rounded-xl bg-[#8FA89B]/16 px-2 py-0.5 text-[10px] text-[#3D5E49] leading-snug truncate">
+                      {t.home.checkInOptions[partnerStatusView.checkInStatus].label} ·{' '}
+                      {partnerStatusView.updatedAtTime}
                     </div>
                   )}
               </div>
             </>
           ) : (
             <div className="my-4 flex flex-col items-center justify-center text-center px-1">
-              <div className="w-9 h-9 rounded-full bg-[#EFEDF5] flex items-center justify-center mb-2">
+              <div className="w-8 h-8 rounded-full bg-[#EFEDF5] flex items-center justify-center mb-1.5">
                 <Lock className="w-4 h-4 text-[#85838D]" strokeWidth={1.75} />
               </div>
               <div className="text-[11px] font-medium text-[#292832]">{t.home.sharingPaused}</div>
@@ -1112,10 +1191,10 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
               </div>
             </div>
           )}
-        </div>
+        </button>
       </section>
 
-      {/* Partner Timely Status Update Banner (appears immediately after partner confirms) */}
+      {/* Partner Timely Status Update Banner */}
       {partnerStatusView.hasConfirmedStatus &&
         !partnerStatusView.isPrivate &&
         partnerStatusView.checkInStatus && (
@@ -1124,30 +1203,26 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
             aria-label={formatTemplate(t.home.partnerStatusUpdatedBanner, {
               partner: partnerProfile.display_name,
             })}
-            className="bg-gradient-to-r from-[#F5E8E7]/75 via-white to-[#EFEDF5]/75 rounded-[22px] p-3.5 ring-1 ring-[#E88C7D]/30 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.07)] space-y-2"
+            className="bg-gradient-to-r from-[#F5E8E7]/75 via-white to-[#EFEDF5]/75 rounded-[20px] p-3.5 ring-1 ring-[#E88C7D]/30 shadow-[0_10px_28px_-10px_rgba(41,40,50,0.07)]"
           >
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-[11px] font-bold text-[#B45A4C]">
+                <div className="text-[11px] font-bold text-[#B45A4C] truncate">
                   {formatTemplate(t.home.partnerStatusUpdatedBanner, {
                     partner: partnerProfile.display_name,
                   })}
                 </div>
                 <div className="text-[12.5px] font-semibold text-[#292832] mt-0.5">
-                  {t.home.latestConfirmedStatusLabel}:{' '}
-                  {t.home.checkInOptions[partnerStatusView.checkInStatus].label}
-                </div>
-                <div className="text-[10.5px] text-[#85838D] mt-0.5">
-                  {t.notifications.todayPrefix} · {partnerStatusView.updatedAtTime}
-                  {partnerStatusView.confirmationState === 'updated'
-                    ? ` · ${t.home.updatedStatusBadge}`
-                    : ` · ${t.home.confirmedStatusBadge}`}
+                  {t.home.checkInOptions[partnerStatusView.checkInStatus].label} ·{' '}
+                  <span className="font-normal text-[11px] text-[#85838D]">
+                    {t.notifications.todayPrefix} {partnerStatusView.updatedAtTime}
+                  </span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => respondWithCareFromStatus(partnerId)}
-                className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[11px] font-semibold shrink-0 transition-all active:scale-95 shadow-[0_6px_14px_-6px_rgba(232,140,125,0.6)]"
+                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#E88C7D] hover:bg-[#DC7D6E] text-white text-[11px] font-semibold shrink-0 transition-all active:scale-95 shadow-[0_6px_14px_-6px_rgba(232,140,125,0.6)]"
               >
                 {t.home.respondWithCareBtn}
               </button>
@@ -1155,97 +1230,112 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
           </section>
         )}
 
-      {/* Today's Summary */}
+      {/* Key Care Reminders / Pending Invitations Shortcuts */}
+      {(activeSenderReminders + activeSenderOrders > 0 || pendingInvitesCount > 0 || readySurpriseCount > 0) && (
+        <div className="grid grid-cols-1 gap-2">
+          {pendingInvitesCount > 0 && (
+            <button
+              type="button"
+              onClick={() => openNotificationsSubView(partnerId, 'invitations')}
+              className="w-full text-left bg-[#EFEDF5]/75 border border-[#9B93B8]/30 rounded-[18px] px-3.5 py-2.5 flex items-center justify-between gap-2 hover:bg-[#E7E3F3] active:scale-[0.98] transition"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Bell className="w-4 h-4 text-[#706794] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold text-[#292832] truncate">
+                    {t.ia.notifications.categories.invitationsTitle}
+                  </div>
+                  <div className="text-[10.5px] text-[#706794] font-medium">
+                    {pendingInvitesCount} · {t.ia.notifications.openDetailHint}
+                  </div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#706794] shrink-0" />
+            </button>
+          )}
+          {activeSenderReminders + activeSenderOrders > 0 && (
+            <button
+              type="button"
+              onClick={() => openCareSubView(partnerId, 'surprise')}
+              className="w-full text-left bg-[#FDF8F5] border border-[#E88C7D]/30 rounded-[18px] px-3.5 py-2.5 flex items-center justify-between gap-2 hover:bg-[#F9EFE9] active:scale-[0.98] transition"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Gift className="w-4 h-4 text-[#D46B5B] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold text-[#292832] truncate">
+                    {t.ia.home.remindersShortcutTitle}
+                  </div>
+                  <div className="text-[10.5px] text-[#B45A4C] font-medium">
+                    {activeSenderReminders + activeSenderOrders} · {t.ia.home.remindersShortcutCta}
+                  </div>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#D46B5B] shrink-0" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Today's Summary (Compact + View Trends Link) */}
       <section
         aria-label={t.home.todaysSummary}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-3"
+        className="bg-white rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-[15px] font-semibold text-[#292832]">
+          <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
             {t.home.todaysSummary}
           </h2>
-          <span className="text-[11px] text-[#85838D]">{t.home.personalView}</span>
+          <button
+            type="button"
+            onClick={() => openInsightsSubView(partnerId, 'trends')}
+            className="text-[11px] font-semibold text-[#706794] hover:underline"
+          >
+            {t.ia.home.viewTrendsShortcut}
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Moon className="w-3.5 h-3.5 text-[#9B93B8]" strokeWidth={2} />
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-[#FDFBFA] rounded-xl p-2.5 border border-[#292832]/[0.04]">
+            <div className="flex items-center gap-1.5 text-[10.5px] text-[#85838D]">
+              <Moon className="w-3 h-3 text-[#9B93B8]" strokeWidth={2} />
               <span>{t.home.sleepDuration}</span>
             </div>
-            <div className="mt-1 font-display text-[15px] font-semibold text-[#292832] tabular-nums">
-              {myLatestRecord.sleep_hours} {t.home.hoursUnit}
+            <div className="mt-0.5 font-display text-[14px] font-semibold text-[#292832] tabular-nums">
+              {myLatestRecord.sleep_hours} {t.home.hoursUnit} · {myLatestRecord.sleep_quality_1_to_5}/5
             </div>
           </div>
 
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Sun className="w-3.5 h-3.5 text-[#E88C7D]" strokeWidth={2} />
-              <span>{t.home.sleepQuality}</span>
-            </div>
-            <div className="mt-1 font-display text-[15px] font-semibold text-[#292832] tabular-nums">
-              {myLatestRecord.sleep_quality_1_to_5} / 5
-            </div>
-          </div>
-
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Activity className="w-3.5 h-3.5 text-[#8FA89B]" strokeWidth={2} />
+          <div className="bg-[#FDFBFA] rounded-xl p-2.5 border border-[#292832]/[0.04]">
+            <div className="flex items-center gap-1.5 text-[10.5px] text-[#85838D]">
+              <Activity className="w-3 h-3 text-[#8FA89B]" strokeWidth={2} />
               <span>{t.home.activity}</span>
             </div>
-            <div className="mt-1 font-display text-[15px] font-semibold text-[#292832] tabular-nums">
+            <div className="mt-0.5 font-display text-[14px] font-semibold text-[#292832] tabular-nums">
               {myLatestRecord.activity_minutes} {t.home.minutesUnit}
-            </div>
-          </div>
-
-          <div className="bg-[#FDFBFA] rounded-2xl p-3 border border-[#292832]/[0.04]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#85838D]">
-              <Clock className="w-3.5 h-3.5 text-[#85838D]" strokeWidth={2} />
-              <span>{t.home.selfReported}</span>
-            </div>
-            <div className="mt-1 font-display text-[13px] font-semibold text-[#292832] truncate">
-              {myCheckIn.status
-                ? t.home.checkInOptions[myCheckIn.status].label
-                : t.home.pendingCheckIn}
             </div>
           </div>
         </div>
 
         {/* Distinct Partner Shared Context Block */}
-        <div className="rounded-2xl bg-[#EFEDF5]/55 px-3 py-2.5 text-[11px] text-[#85838D] space-y-1">
+        <div className="rounded-xl bg-[#EFEDF5]/55 px-3 py-2 text-[11px] text-[#85838D] space-y-1">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-[#292832]/85">
               {formatTemplate(t.home.partnerSharedContext, {
                 partner: partnerProfile.display_name,
               })}
             </span>
-            <span className="text-[#706794] font-medium">{t.home.privacyControlled}</span>
+            <span className="text-[#706794] font-medium text-[10px]">{t.home.privacyControlled}</span>
           </div>
-          {partnerStatusView.hasConfirmedStatus &&
-            !partnerStatusView.isPrivate &&
-            partnerStatusView.checkInStatus && (
-              <div className="text-[#3D5E49] font-medium">
-                {t.home.latestConfirmedStatusLabel}:{' '}
-                {t.home.checkInOptions[partnerStatusView.checkInStatus].label} (
-                {partnerStatusView.updatedAtTime})
-              </div>
-            )}
           {hasPartnerSharedBiometrics ? (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[#292832]/85 tabular-nums">
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[#292832]/85 tabular-nums">
               {partnerSharing.sleep && (
                 <span>
-                  {t.home.sleepLabel}: {partnerLatestRecord.sleep_hours}h (
-                  {partnerLatestRecord.sleep_quality_1_to_5}/5)
+                  {t.home.sleepLabel}: {partnerLatestRecord.sleep_hours}h ({partnerLatestRecord.sleep_quality_1_to_5}/5)
                 </span>
               )}
               {partnerSharing.activity && (
                 <span>
-                  {t.home.activityLabel}: {partnerLatestRecord.activity_minutes}{' '}
-                  {t.home.minutesUnit}
-                  {partnerLatestRecord.steps !== null &&
-                  partnerLatestRecord.steps !== undefined
-                    ? ` · ${partnerLatestRecord.steps.toLocaleString()} ${t.home.stepsShortLabel}`
-                    : ''}
+                  {t.home.activityLabel}: {partnerLatestRecord.activity_minutes} {t.home.minutesUnit}
                 </span>
               )}
               {partnerSharing.heartRate &&
@@ -1253,8 +1343,7 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
                 partnerLatestRecord.resting_heart_rate_bpm !== undefined && (
                   <span className="inline-flex items-center gap-1">
                     <HeartPulse className="w-3 h-3 text-[#E88C7D]" />
-                    {t.home.rhrShortLabel}: {partnerLatestRecord.resting_heart_rate_bpm}{' '}
-                    {t.insights.rhrUnit}
+                    {partnerLatestRecord.resting_heart_rate_bpm} {t.insights.rhrUnit}
                   </span>
                 )}
               {partnerSharing.hrv &&
@@ -1262,23 +1351,12 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
                 partnerLatestRecord.hrv_value_ms !== undefined && (
                   <span className="inline-flex items-center gap-1">
                     <Waves className="w-3 h-3 text-[#706794]" />
-                    {t.home.hrvShortLabel} (
-                    {partnerLatestRecord.hrv_metric_type ??
-                      partnerMultiSummary?.hrvMetricType ??
-                      'HRV'}
-                    ): {partnerLatestRecord.hrv_value_ms} {t.insights.hrvUnit}
-                  </span>
-                )}
-              {partnerSharing.cycleTrackingEnabled &&
-                partnerSharing.cycle &&
-                partnerLatestRecord.recorded_cycle_phase && (
-                  <span>
-                    {t.home.cyclePhaseLabel}: {partnerLatestRecord.recorded_cycle_phase}
+                    {partnerLatestRecord.hrv_value_ms} {t.insights.hrvUnit}
                   </span>
                 )}
             </div>
           ) : !partnerSharing.energy ? (
-            <p className="leading-relaxed">
+            <p className="leading-snug">
               {partnerStatusView.hasConfirmedStatus && partnerStatusView.isPrivate
                 ? formatTemplate(t.home.partnerStatusPrivateNotice, {
                     partner: partnerProfile.display_name,
@@ -1288,7 +1366,7 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
                   })}
             </p>
           ) : (
-            <p className="leading-relaxed">
+            <p className="leading-snug">
               {formatTemplate(t.home.partnerDefaultPrivacyNotice, {
                 partner: partnerProfile.display_name,
               })}
@@ -1497,16 +1575,23 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
         )}
       </section>
 
-      {/* AI Insight Preview */}
-      <section
-        aria-label={t.home.aiInsightPreview}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+      {/* Tappable AI Insight Preview Card */}
+      <button
+        type="button"
+        onClick={() => openInsightsSubView(partnerId, 'patterns')}
+        className="w-full text-left bg-white rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2 hover:ring-1 hover:ring-[#9B93B8]/40 active:scale-[0.99] transition"
       >
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#706794]">
-          <Sparkles className="w-3.5 h-3.5 text-[#9B93B8]" strokeWidth={2} />
-          <span>{t.home.aiInsightPreview}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#706794]">
+            <Sparkles className="w-3.5 h-3.5 text-[#9B93B8]" strokeWidth={2} />
+            <span>{t.home.aiInsightPreview}</span>
+          </div>
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B527E]">
+            {t.ia.home.insightsPreviewCta}
+            <ArrowRight className="w-3 h-3" />
+          </span>
         </div>
-        <p className="text-[13px] text-[#292832] leading-relaxed">
+        <p className="text-[12.5px] text-[#292832] leading-relaxed">
           {(() => {
             const myPattern = presentationBundle.partnerProfiles[partnerId].insights.analytics.pattern;
             const otherPattern =
@@ -1525,52 +1610,63 @@ function PresentationHomeContent({ partnerId }: { partnerId: PartnerId }) {
             return t.home.insightPreviewSelfSteady;
           })()}
         </p>
-        <button
-          type="button"
-          onClick={() => setActivePage(partnerId, 'insights')}
-          className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-2 rounded-2xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[12px] font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-[#9B93B8]"
-        >
-          <span>{t.home.viewInsights}</span>
-          <ArrowRight className="w-3.5 h-3.5" strokeWidth={2} />
-        </button>
-      </section>
+      </button>
 
-      {/* Recent Care Activity */}
+      {/* Compact Recent Care Activity + Quick Shortcuts */}
       <section
         aria-label={t.home.recentCareActivity}
-        className="bg-white rounded-[22px] p-4 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
+        className="bg-white rounded-[22px] p-3.5 shadow-[0_10px_30px_-10px_rgba(41,40,50,0.06)] space-y-2.5"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-[15px] font-semibold text-[#292832]">
+          <h2 className="font-display text-[14.5px] font-semibold text-[#292832]">
             {t.home.recentCareActivity}
           </h2>
           <button
             type="button"
-            onClick={() => setActivePage(partnerId, 'care')}
-            className="text-[11.5px] font-semibold text-[#D46B5B] hover:underline min-h-[32px] px-1 active:scale-95 transition-transform"
+            onClick={() => openNotificationsSubView(partnerId, 'overview')}
+            className="text-[11px] font-semibold text-[#706794] hover:underline"
           >
-            {t.home.openCare}
+            {t.ia.home.notificationsShortcutCta}
           </button>
         </div>
 
         <ul className="divide-y divide-[#292832]/[0.05]">
-          {careActivity.slice(0, 4).map((item) => {
+          {careActivity.slice(0, 3).map((item) => {
             const dayPrefix =
               item.dayKind === 'today'
                 ? t.notifications.todayPrefix
                 : t.notifications.yesterdayPrefix;
             return (
               <li key={item.id} className="py-2 first:pt-0 last:pb-0">
-                <p className="text-[12.5px] text-[#292832] leading-snug">
+                <p className="text-[12px] text-[#292832] leading-snug">
                   {renderActivityText(item)}
                 </p>
-                <span className="text-[10.5px] text-[#85838D]">
+                <span className="text-[10px] text-[#85838D]">
                   {dayPrefix} · {item.timeLabel}
                 </span>
               </li>
             );
           })}
         </ul>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => openCareSubView(partnerId, 'now')}
+            className="min-h-[40px] px-3 rounded-xl bg-[#F5E8E7] hover:bg-[#EEDCD9] text-[#B45A4C] text-[11.5px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition"
+          >
+            <span>{t.ia.home.careShortcutCta}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openCareSubView(partnerId, 'surprise')}
+            className="min-h-[40px] px-3 rounded-xl bg-[#EFEDF5] hover:bg-[#E4E0F0] text-[#5B527E] text-[11.5px] font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition"
+          >
+            <Gift className="w-3.5 h-3.5" />
+            <span className="truncate">{t.ia.care.surprisePageTitle}</span>
+          </button>
+        </div>
       </section>
 
       <div className="text-center text-[10px] text-[#85838D]/85 pt-0.5">

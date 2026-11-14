@@ -391,6 +391,55 @@ export interface TranslationDictionary {
       backToSuggestions: string;
       backToPresets: string;
     };
+    stage58: {
+      careForNow: {
+        badge: string;
+        title: string;
+        subtitle: string;
+        kickerQuestion: string;
+        todaySnapshotLabel: string;
+        todayEnergyChip: string;
+        timingNowTag: string;
+        evidenceToggleShow: string;
+        evidenceToggleHide: string;
+        observedDataTag: string;
+        noExtraNeededNote: string;
+      };
+      planAhead: {
+        badge: string;
+        title: string;
+        subtitle: string;
+        kickerQuestion: string;
+        overviewTitle: string;
+        overviewSubtitle: string;
+        estimateBadge: string;
+        selectedDayEstimateLabel: string;
+        observedHistoryLabel: string;
+        overallMeanChip: string;
+        recent7Chip: string;
+        patternCalloutTemplate: string;
+        patternSleepCorrelationTemplate: string;
+        steadyPatternNotice: string;
+        confidencePrefix: string;
+        confidenceLabels: {
+          Low: string;
+          Moderate: string;
+          'Insufficient Data': string;
+        };
+        futureRecommendationsTitle: string;
+        futureRecommendationsSubtitle: string;
+        planDateBtn: string;
+        setReminderBtn: string;
+        prepareSurpriseBtn: string;
+        manualOnlyDisclaimer: string;
+        privacyPausedTitle: string;
+        privacyPausedBody: string;
+        coldStartEmptyTitle: string;
+        coldStartEmptyBody: string;
+        coldStartDaysProgress: string;
+        coldStartWeeksProgress: string;
+      };
+    };
   };
   notifications: {
     title: string;
@@ -1049,6 +1098,123 @@ export interface TranslationDictionary {
     resetOnboardingBody: string;
     confirmResetOnboarding: string;
   };
+  ia: {
+    back: string;
+    backToOverview: string;
+    home: {
+      viewTrendsShortcut: string;
+      remindersShortcutTitle: string;
+      remindersShortcutCta: string;
+      insightsPreviewTitle: string;
+      insightsPreviewCta: string;
+      careShortcutCta: string;
+      notificationsShortcutCta: string;
+      profileShortcutLabel: string;
+      recentActivityTitle: string;
+    };
+    insights: {
+      overviewTitle: string;
+      overviewSubtitle: string;
+      atAGlanceTitle: string;
+      cards: {
+        trendsTitle: string;
+        trendsDesc: string;
+        patternsTitle: string;
+        patternsDesc: string;
+        forecastTitle: string;
+        forecastDesc: string;
+        methodologyTitle: string;
+        methodologyDesc: string;
+      };
+      subpages: {
+        trendsTitle: string;
+        patternsTitle: string;
+        forecastTitle: string;
+        methodologyTitle: string;
+      };
+      accordions: {
+        sleepVitalsNotesTitle: string;
+        whyPatternTitle: string;
+        howForecastTitle: string;
+        energyScaleTitle: string;
+        confidenceRulesTitle: string;
+        privacyBoundaryTitle: string;
+      };
+    };
+    care: {
+      overviewSubtitle: string;
+      scenarios: {
+        now: string;
+        planAhead: string;
+        datePlanning: string;
+      };
+      surpriseCardTitle: string;
+      surpriseCardDesc: string;
+      surpriseCardBadgeDue: string;
+      surpriseCardBadgeActive: string;
+      surprisePageTitle: string;
+      surprisePrivacyTitle: string;
+      surpriseCreateBtn: string;
+      detailPageTitle: string;
+      detailOpenCta: string;
+      detailReasoningTitle: string;
+      detailContextTitle: string;
+      detailActionsTitle: string;
+      detailMessageTitle: string;
+    };
+    notifications: {
+      overviewTitle: string;
+      overviewSubtitle: string;
+      settingsShortcut: string;
+      categories: {
+        invitationsTitle: string;
+        invitationsDesc: string;
+        careUpdatesTitle: string;
+        careUpdatesDesc: string;
+        ordersTitle: string;
+        ordersDesc: string;
+        momentsTitle: string;
+        momentsDesc: string;
+      };
+      emptyCategory: string;
+      openDetailHint: string;
+      detailTitle: string;
+      invitationsEmptyNote: string;
+      normalInvitationsNote: string;
+      normalMomentsNote: string;
+      proposeAltTimeBtn: string;
+      proposeAltTimeTitle: string;
+      altTimeSlotLabel: string;
+      altTimeCustomPlaceholder: string;
+      altTimeNotePlaceholder: string;
+      altTimeSubmitBtn: string;
+      altTimeProposedBadge: string;
+      altTimePresets: {
+        tonight8: string;
+        tomorrow7: string;
+        weekendAfternoon: string;
+        sundayMorning: string;
+      };
+      membershipSection: {
+        title: string;
+        pageTitle: string;
+        openCta: string;
+        backToNotifications: string;
+      };
+      personalSettingsSection: {
+        title: string;
+        pageTitle: string;
+        subtitle: string;
+        openCta: string;
+        pairedBadge: string;
+        unpairedBadge: string;
+      };
+    };
+    profile: {
+      pageTitle: string;
+      membershipPageTitle: string;
+    };
+  };
 }
 
 export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
@@ -1321,7 +1487,7 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
       },
     },
     care: {
-      title: 'AI Care',
+      title: 'Care Inspiration',
       subtitle: 'Small actions. Thoughtful moments.',
       defaultRecipient: 'Default Recipient',
       predictedWindowLabel: 'Predicted window:',
@@ -1603,6 +1769,62 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
         upgradeCta: 'Upgrade to Premium',
         backToSuggestions: 'Back to Care Suggestions',
         backToPresets: 'Browse Preset Suggestions',
+      },
+      stage58: {
+        careForNow: {
+          badge: 'Immediate Context',
+          title: 'Care for Now',
+          subtitle: 'Thoughtful care for what matters today.',
+          kickerQuestion: 'What does your partner need today?',
+          todaySnapshotLabel: 'Authorized Today Snapshot',
+          todayEnergyChip: 'Today Energy: {score}/100',
+          timingNowTag: 'Today · Immediate',
+          evidenceToggleShow: 'Why this suggestion?',
+          evidenceToggleHide: 'Hide details',
+          observedDataTag: 'Observed today & recent signals',
+          noExtraNeededNote: 'Ready to send or save when you choose.',
+        },
+        planAhead: {
+          badge: 'Forward Planning',
+          title: 'Plan Ahead',
+          subtitle: 'Be one step ahead of the moments that matter.',
+          kickerQuestion: 'What upcoming moment may need care?',
+          overviewTitle: 'Upcoming Energy Overview',
+          overviewSubtitle: 'Pattern-based 7-day estimates reusing Stage 3 analytics — not guaranteed outcomes.',
+          estimateBadge: 'Pattern-based estimate',
+          selectedDayEstimateLabel: '{day} ({date}): ~{score}/100 estimate',
+          observedHistoryLabel: 'Observed baseline',
+          overallMeanChip: '60d avg {score}',
+          recent7Chip: '7d avg {score}',
+          patternCalloutTemplate:
+            'Observed pattern: {count} {weekday}s across {weeks} weeks averaged {weekdayMean} vs {overallMean} overall ({pct}% below baseline threshold).',
+          patternSleepCorrelationTemplate:
+            'Authorized note: prior-night sleep averaged {hours}h before {weekday}s (correlation only).',
+          steadyPatternNotice:
+            'No repeating weekday dip stands out in the last {days} days — upcoming focus leans on gentle quality time.',
+          confidencePrefix: 'Confidence:',
+          confidenceLabels: {
+            Low: 'Low',
+            Moderate: 'Moderate',
+            'Insufficient Data': 'Insufficient Data',
+          },
+          futureRecommendationsTitle: 'Future Care Recommendations',
+          futureRecommendationsSubtitle:
+            'Actionable ideas timed ahead of lower-energy windows or steadier days for shared plans.',
+          planDateBtn: 'Plan a Date',
+          setReminderBtn: 'Set Reminder',
+          prepareSurpriseBtn: 'Prepare Surprise',
+          manualOnlyDisclaimer:
+            'Every order, reminder, surprise, or date invite requires your explicit confirmation — nothing triggers automatically from estimates.',
+          privacyPausedTitle: 'Upcoming Energy Overview Paused',
+          privacyPausedBody:
+            '{partner} has paused Energy Summary sharing, so forward energy estimates and pattern planning stay private.',
+          coldStartEmptyTitle: 'Building Your Real Personal Baseline',
+          coldStartEmptyBody:
+            'Plan Ahead unlocks once you have logged at least 28 days and 4 repeated weeks per weekday from genuine check-ins — no demo forecasts are fabricated here.',
+          coldStartDaysProgress: '{count} / 28 check-in days recorded',
+          coldStartWeeksProgress: '{weeks} / 4 distinct weeks observed',
+        },
       },
     },
     notifications: {
@@ -2529,6 +2751,123 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
         'This will permanently clear your personal profile, daily check-in records, local pairing, sharing consent, and preferences, then return to Welcome. Presentation Demo Mode will not be affected.',
       confirmResetOnboarding: 'Reset Personal Data',
     },
+    ia: {
+      back: 'Back',
+      backToOverview: 'Overview',
+      home: {
+        viewTrendsShortcut: 'View Trends →',
+        remindersShortcutTitle: 'Care Reminders & Orders',
+        remindersShortcutCta: 'Open Surprise Care',
+        insightsPreviewTitle: 'Pattern & Forecast Highlight',
+        insightsPreviewCta: 'Explore Insights',
+        careShortcutCta: 'Send Care',
+        notificationsShortcutCta: 'All Messages',
+        profileShortcutLabel: 'Profile',
+        recentActivityTitle: 'Recent Care Activity',
+      },
+      insights: {
+        overviewTitle: 'Energy Insights',
+        overviewSubtitle: 'Explore trends, patterns, forecasts, and calculation notes by category.',
+        atAGlanceTitle: 'At a Glance',
+        cards: {
+          trendsTitle: 'Energy Trends',
+          trendsDesc: '30d / 60d curves, sleep stages, HRV, RHR, and activity.',
+          patternsTitle: 'Recurring Patterns',
+          patternsDesc: 'Weekday rhythms and qualified 4-week historical signals.',
+          forecastTitle: 'Seven-Day Forecast',
+          forecastDesc: 'Projected energy curve and day-by-day confidence bands.',
+          methodologyTitle: 'Data & Confidence Explanation',
+          methodologyDesc: 'How Energy Index, confidence levels, and privacy boundaries work.',
+        },
+        subpages: {
+          trendsTitle: 'Energy Trends',
+          patternsTitle: 'Recurring Patterns',
+          forecastTitle: 'Seven-Day Forecast',
+          methodologyTitle: 'Data & Confidence',
+        },
+        accordions: {
+          sleepVitalsNotesTitle: 'Measurement Source & Null-Safe Notes',
+          whyPatternTitle: 'Why This Pattern Was Identified',
+          howForecastTitle: 'How Forecast & Confidence Are Calculated',
+          energyScaleTitle: 'Energy Index & 1–5 Self-Report Scale',
+          confidenceRulesTitle: 'Confidence & Pattern Qualification Rules',
+          privacyBoundaryTitle: 'Privacy & Non-Diagnostic Boundary',
+        },
+      },
+      care: {
+        overviewSubtitle: 'Choose a care scenario or open Surprise Care.',
+        scenarios: {
+          now: 'Care for Now',
+          planAhead: 'Plan Ahead',
+          datePlanning: 'Date Planning',
+        },
+        surpriseCardTitle: 'Surprise Care & Orders',
+        surpriseCardDesc: 'Prepared surprises, due reminders, and simulated delivery tracking.',
+        surpriseCardBadgeDue: '{count} due',
+        surpriseCardBadgeActive: '{count} active',
+        surprisePageTitle: 'Surprise Care',
+        surprisePrivacyTitle: 'How Surprise Privacy & Delivery Masking Work',
+        surpriseCreateBtn: 'Create New Surprise from Suggestion',
+        detailPageTitle: 'Care Suggestion Detail',
+        detailOpenCta: 'View Details & Actions',
+        detailReasoningTitle: 'Why This Fits',
+        detailContextTitle: 'Timing & Context',
+        detailActionsTitle: 'Care Actions',
+        detailMessageTitle: 'Customize Your Care Note',
+      },
+      notifications: {
+        overviewTitle: 'Notifications & Moments',
+        overviewSubtitle: 'Browse invitations, care updates, orders, and shared moments.',
+        settingsShortcut: 'Alert Settings',
+        categories: {
+          invitationsTitle: 'Pending Invitations',
+          invitationsDesc: 'Date plan invites awaiting reply, alternative times, or confirmation.',
+          careUpdatesTitle: 'Care Updates',
+          careUpdatesDesc: 'Partner check-ins, sent notes, and non-order surprise alerts.',
+          ordersTitle: 'Order Updates',
+          ordersDesc: 'Simulated gift & delivery tracking with surprise privacy masking.',
+          momentsTitle: 'Care Moments',
+          momentsDesc: 'Completed care timeline, notes, and archive history.',
+        },
+        emptyCategory: 'Nothing in this category yet.',
+        openDetailHint: 'Tap to view details',
+        detailTitle: 'Notification Detail',
+        invitationsEmptyNote: 'No pending date invitations right now.',
+        normalInvitationsNote: 'Date invitations appear when paired in a live or demo session.',
+        normalMomentsNote: 'Completed care moments are archived here once recorded in a coupled session.',
+        proposeAltTimeBtn: 'Suggest Alternative Time',
+        proposeAltTimeTitle: 'Propose Another Time',
+        altTimeSlotLabel: 'Choose or enter a time slot',
+        altTimeCustomPlaceholder: 'e.g. Friday 7:30 PM after dinner',
+        altTimeNotePlaceholder: 'Optional note (e.g. calmer evening pace)',
+        altTimeSubmitBtn: 'Send Alternative Time',
+        altTimeProposedBadge: 'Alternative time proposed',
+        altTimePresets: {
+          tonight8: 'Tonight · 8:00 PM',
+          tomorrow7: 'Tomorrow · 7:00 PM',
+          weekendAfternoon: 'Saturday · 3:00 PM',
+          sundayMorning: 'Sunday · 10:30 AM',
+        },
+        membershipSection: {
+          title: 'Membership & Benefits',
+          pageTitle: 'Membership & Benefits',
+          openCta: 'View plans & benefits',
+          backToNotifications: 'Back to Notifications',
+        },
+        personalSettingsSection: {
+          title: 'Personal Settings',
+          pageTitle: 'Personal Settings',
+          subtitle: 'Profile, couple connection, reminder alerts, privacy permissions & preferences',
+          openCta: 'Open Personal Settings',
+          pairedBadge: 'Paired',
+          unpairedBadge: 'Not paired',
+        },
+      },
+      profile: {
+        pageTitle: 'Profile & Settings',
+        membershipPageTitle: 'Couple Membership',
+      },
+    },
   },
 
   'zh-CN': {
@@ -2785,7 +3124,7 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
       },
     },
     care: {
-      title: 'AI 关怀',
+      title: '关怀灵感',
       subtitle: '微小行动，暖心时刻。',
       defaultRecipient: '默认关怀对象',
       predictedWindowLabel: '预计需要关怀时段：',
@@ -3050,6 +3389,62 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
         upgradeCta: '升级伴侣尊享版',
         backToSuggestions: '返回关怀建议',
         backToPresets: '查看预设关怀建议',
+      },
+      stage58: {
+        careForNow: {
+          badge: '当下关怀',
+          title: '当下关怀（Care for Now）',
+          subtitle: '聚焦今天此刻真正重要的温柔支持。',
+          kickerQuestion: '伴侣今天最需要什么样的关怀？',
+          todaySnapshotLabel: '今日已授权参考',
+          todayEnergyChip: '今日精力指数：{score}/100',
+          timingNowTag: '今天 · 即时可用',
+          evidenceToggleShow: '为什么推荐这个？',
+          evidenceToggleHide: '收起依据详情',
+          observedDataTag: '依据今日与近期已授权信号',
+          noExtraNeededNote: '可随时自行发送、保存或下单。',
+        },
+        planAhead: {
+          badge: '提前规划',
+          title: '提前规划（Plan Ahead）',
+          subtitle: '比需要被照顾的时刻提前一步做好准备。',
+          kickerQuestion: '接下来哪几天更值得提前准备？',
+          overviewTitle: '未来精力趋势概览',
+          overviewSubtitle: '基于第三阶段算法对未来 7 天做的规律推算（仅供参考，非确定预测）。',
+          estimateBadge: '基于规律推算',
+          selectedDayEstimateLabel: '{day}（{date}）：约 {score}/100（估算值）',
+          observedHistoryLabel: '已观测历史基线',
+          overallMeanChip: '60天均值 {score}',
+          recent7Chip: '近7天均值 {score}',
+          patternCalloutTemplate:
+            '历史规律观测：跨 {weeks} 周的 {count} 个{weekday}平均精力度数为 {weekdayMean}，低于整体均值 {overallMean}（{pct}% 低于基线阈值）。',
+          patternSleepCorrelationTemplate:
+            '已授权补充观测：{weekday}前一晚平均睡眠为 {hours} 小时（仅作关联参考）。',
+          steadyPatternNotice:
+            '过去 {days} 天整体节奏平稳，未见明显周中下滑节点，适合预约轻松相处时光。',
+          confidencePrefix: '置信度：',
+          confidenceLabels: {
+            Low: '较低',
+            Moderate: '中等',
+            'Insufficient Data': '数据尚不足',
+          },
+          futureRecommendationsTitle: '未来关怀提前行动建议',
+          futureRecommendationsSubtitle:
+            '提前为精力偏低的时段准备减负缓冲，或在较平稳的日期预约双人约会。',
+          planDateBtn: '去约会计划',
+          setReminderBtn: '设定提醒',
+          prepareSurpriseBtn: '准备惊喜',
+          manualOnlyDisclaimer:
+            '所有下单、提醒、惊喜或约会邀请均需你本人手动确认，系统绝不会因预估结果自动执行。',
+          privacyPausedTitle: '未来精力趋势已暂隐',
+          privacyPausedBody:
+            '{partner} 当前关闭了精力摘要共享，因此系统不展示未来推算与周期规划建议。',
+          coldStartEmptyTitle: '正在积累真实个人数据基线',
+          coldStartEmptyBody:
+            '积累满 28 天真实签到且同一星期观测满 4 周后，系统才会开启「提前规划」趋势推算；在此之前绝不编造虚假预测。',
+          coldStartDaysProgress: '已记录 {count} / 28 天真实签到',
+          coldStartWeeksProgress: '已累计 {weeks} / 4 个不同自然周',
+        },
       },
     },
     notifications: {
@@ -3894,6 +4289,123 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
         '此操作将清除你的个人昵称、所有每日签到记录、本地配对、隐私设置与偏好，并返回欢迎页。双机演示模式数据不受影响。',
       confirmResetOnboarding: '确认重置',
     },
+    ia: {
+      back: '返回',
+      backToOverview: '总览',
+      home: {
+        viewTrendsShortcut: '查看趋势 →',
+        remindersShortcutTitle: '关怀提醒与模拟订单',
+        remindersShortcutCta: '打开惊喜关怀',
+        insightsPreviewTitle: '规律与趋势摘要',
+        insightsPreviewCta: '进入洞察详情',
+        careShortcutCta: '发送关怀',
+        notificationsShortcutCta: '全部消息',
+        profileShortcutLabel: '个人设置',
+        recentActivityTitle: '近期关怀动态',
+      },
+      insights: {
+        overviewTitle: '能量洞察',
+        overviewSubtitle: '按类别浏览能量趋势、规律识别、7 日预测与数据说明。',
+        atAGlanceTitle: '核心概览',
+        cards: {
+          trendsTitle: '能量趋势',
+          trendsDesc: '30 天 / 60 天能量曲线、睡眠分期、HRV、静息心率与活动量。',
+          patternsTitle: '周期规律',
+          patternsDesc: '工作日节奏与满足 4 周验证门槛的历史信号。',
+          forecastTitle: '未来七日预测',
+          forecastDesc: '未来 7 天能量走势预估与每日置信区间。',
+          methodologyTitle: '数据与置信度说明',
+          methodologyDesc: '了解能量指数、置信度评估规则与隐私边界。',
+        },
+        subpages: {
+          trendsTitle: '能量趋势',
+          patternsTitle: '周期规律',
+          forecastTitle: '未来七日预测',
+          methodologyTitle: '数据与置信度说明',
+        },
+        accordions: {
+          sleepVitalsNotesTitle: '测量来源与空值处理说明',
+          whyPatternTitle: '为什么识别出该规律',
+          howForecastTitle: '预测曲线与置信度如何计算',
+          energyScaleTitle: '能量指数与 1–5 自评量表',
+          confidenceRulesTitle: '置信度与规律采信规则',
+          privacyBoundaryTitle: '隐私保护与非医疗诊断声明',
+        },
+      },
+      care: {
+        overviewSubtitle: '按当前场景选择关怀建议，或管理惊喜关怀。',
+        scenarios: {
+          now: '当下关怀',
+          planAhead: '提前规划',
+          datePlanning: '约会安排',
+        },
+        surpriseCardTitle: '惊喜关怀与订单追踪',
+        surpriseCardDesc: '查看已准备的惊喜、到期提醒与模拟外卖进度。',
+        surpriseCardBadgeDue: '{count} 条提醒到期',
+        surpriseCardBadgeActive: '{count} 项进行中',
+        surprisePageTitle: '惊喜关怀',
+        surprisePrivacyTitle: '惊喜防剧透与隐私保护说明',
+        surpriseCreateBtn: '基于建议创建新惊喜',
+        detailPageTitle: '关怀建议详情',
+        detailOpenCta: '查看详情与操作',
+        detailReasoningTitle: '推荐依据',
+        detailContextTitle: '时机与参考背景',
+        detailActionsTitle: '关怀操作',
+        detailMessageTitle: '自定义关怀留言',
+      },
+      notifications: {
+        overviewTitle: '消息与纪念',
+        overviewSubtitle: '分类查看约会邀请、关怀动态、订单更新与关怀时刻。',
+        settingsShortcut: '提醒设置',
+        categories: {
+          invitationsTitle: '待处理邀请',
+          invitationsDesc: '等待回复、协商改期或最终确认的约会邀请。',
+          careUpdatesTitle: '关怀动态',
+          careUpdatesDesc: '伴侣状态更新、关怀留言与非订单类惊喜提醒。',
+          ordersTitle: '订单更新',
+          ordersDesc: '模拟配送与礼物追踪（自动遵循惊喜隐私隐藏规则）。',
+          momentsTitle: '关怀时刻',
+          momentsDesc: '已完成关怀的时间线、备注与历史记录。',
+        },
+        emptyCategory: '该分类暂时没有内容。',
+        openDetailHint: '点击查看详情',
+        detailTitle: '消息详情',
+        invitationsEmptyNote: '当前没有待处理的约会邀请。',
+        normalInvitationsNote: '在伴侣联机或双机演示模式下可收发约会邀请。',
+        normalMomentsNote: '伴侣互动完成后，对应的关怀时刻将记录于此。',
+        proposeAltTimeBtn: '建议其他时间',
+        proposeAltTimeTitle: '提议改期时间',
+        altTimeSlotLabel: '选择预设时段或自定义时间',
+        altTimeCustomPlaceholder: '例如：周五晚 7:30 晚饭后',
+        altTimeNotePlaceholder: '补充说明（例如：那晚节奏更轻松）',
+        altTimeSubmitBtn: '发送改期建议',
+        altTimeProposedBadge: '已提议新时间',
+        altTimePresets: {
+          tonight8: '今晚 · 8:00 PM',
+          tomorrow7: '明晚 · 7:00 PM',
+          weekendAfternoon: '周六 · 下午 3:00',
+          sundayMorning: '周日 · 上午 10:30',
+        },
+        membershipSection: {
+          title: '会员与权益',
+          pageTitle: '会员与权益',
+          openCta: '查看方案与权益',
+          backToNotifications: '返回消息中心',
+        },
+        personalSettingsSection: {
+          title: '个人设置',
+          pageTitle: '个人设置',
+          subtitle: '个人资料与头像、伴侣关系、提醒偏好、隐私授权与其他设置',
+          openCta: '打开个人设置',
+          pairedBadge: '已连接',
+          unpairedBadge: '未配对',
+        },
+      },
+      profile: {
+        pageTitle: '个人资料与设置',
+        membershipPageTitle: '伴侣会员方案',
+      },
+    },
   },
 
   'zh-TW': {
@@ -4150,7 +4662,7 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
       },
     },
     care: {
-      title: 'AI 關懷',
+      title: '關懷靈感',
       subtitle: '微小行動，暖心時刻。',
       defaultRecipient: '預設關懷對象',
       predictedWindowLabel: '預計需要關懷時段：',
@@ -4415,6 +4927,62 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
         upgradeCta: '升級伴侶尊享版',
         backToSuggestions: '返回關懷建議',
         backToPresets: '瀏覽預設關懷建議',
+      },
+      stage58: {
+        careForNow: {
+          badge: '當下關懷',
+          title: '當下關懷（Care for Now）',
+          subtitle: '聚焦今天此刻真正重要的溫柔支持。',
+          kickerQuestion: '伴侶今天最需要什麼樣的關懷？',
+          todaySnapshotLabel: '今日已授權參考',
+          todayEnergyChip: '今日精力指數：{score}/100',
+          timingNowTag: '今天 · 即時可用',
+          evidenceToggleShow: '為什麼推薦這個？',
+          evidenceToggleHide: '收起依據詳情',
+          observedDataTag: '依據今日與近期已授權訊號',
+          noExtraNeededNote: '可隨時自行傳送、儲存或下單。',
+        },
+        planAhead: {
+          badge: '提前規劃',
+          title: '提前規劃（Plan Ahead）',
+          subtitle: '比需要被照顧的時刻提前一步做好準備。',
+          kickerQuestion: '接下來哪幾天更值得提前準備？',
+          overviewTitle: '未來精力趨勢概覽',
+          overviewSubtitle: '依據第三階段演算法對未來 7 天做的規律推算（僅供參考，非確定預測）。',
+          estimateBadge: '依規律推算',
+          selectedDayEstimateLabel: '{day}（{date}）：約 {score}/100（推算值）',
+          observedHistoryLabel: '已觀測歷史基線',
+          overallMeanChip: '60天均值 {score}',
+          recent7Chip: '近7天均值 {score}',
+          patternCalloutTemplate:
+            '歷史規律觀測：跨 {weeks} 週的 {count} 個{weekday}平均精力指數為 {weekdayMean}，低於整體均值 {overallMean}（{pct}% 低於基線閾值）。',
+          patternSleepCorrelationTemplate:
+            '已授權補充觀測：{weekday}前一晚平均睡眠為 {hours} 小時（僅作關聯參考）。',
+          steadyPatternNotice:
+            '過去 {days} 天整體步調平穩，未見明顯週間下滑節點，適合預約輕鬆相處時光。',
+          confidencePrefix: '信心度：',
+          confidenceLabels: {
+            Low: '較低',
+            Moderate: '中等',
+            'Insufficient Data': '資料尚不足',
+          },
+          futureRecommendationsTitle: '未來關懷提前行動建議',
+          futureRecommendationsSubtitle:
+            '提前替精力偏低的時段準備減負緩衝，或在較平穩的日子預約雙人約會。',
+          planDateBtn: '前往約會計畫',
+          setReminderBtn: '設定提醒',
+          prepareSurpriseBtn: '準備驚喜',
+          manualOnlyDisclaimer:
+            '所有下單、提醒、驚喜或約會邀請均須由你親自確認，系統絕不會依推算結果自動執行。',
+          privacyPausedTitle: '未來精力趨勢已暫隱',
+          privacyPausedBody:
+            '{partner} 目前關閉了精力摘要分享，因此系統不顯示未來推算與週期規劃建議。',
+          coldStartEmptyTitle: '正在累積真實個人資料基線',
+          coldStartEmptyBody:
+            '累積滿 28 天真實簽到且同一星期觀測滿 4 週後，系統才會開啟「提前規劃」趨勢推算；在此之前絕不編造假預測。',
+          coldStartDaysProgress: '已紀錄 {count} / 28 天真實簽到',
+          coldStartWeeksProgress: '已累計 {weeks} / 4 個不同自然週',
+        },
       },
     },
     notifications: {
@@ -5258,6 +5826,123 @@ export const TRANSLATIONS: Record<LanguageCode, TranslationDictionary> = {
       resetOnboardingBody:
         '此操作將清除你的個人暱稱、所有每日簽到紀錄、本機配對、隱私設定與偏好，並返回歡迎頁。雙機展示模式數據不受影響。',
       confirmResetOnboarding: '確認重設',
+    },
+    ia: {
+      back: '返回',
+      backToOverview: '總覽',
+      home: {
+        viewTrendsShortcut: '查看趨勢 →',
+        remindersShortcutTitle: '關懷提醒與模擬訂單',
+        remindersShortcutCta: '打開驚喜關懷',
+        insightsPreviewTitle: '規律與趨勢摘要',
+        insightsPreviewCta: '進入洞察詳情',
+        careShortcutCta: '傳送關懷',
+        notificationsShortcutCta: '全部訊息',
+        profileShortcutLabel: '個人設定',
+        recentActivityTitle: '近期關懷動態',
+      },
+      insights: {
+        overviewTitle: '能量洞察',
+        overviewSubtitle: '依分類瀏覽能量趨勢、週期規律、7 日預測與計算說明。',
+        atAGlanceTitle: '核心概覽',
+        cards: {
+          trendsTitle: '能量趨勢',
+          trendsDesc: '30 天 / 60 天能量曲線、睡眠分期、HRV、靜息心率與活動量。',
+          patternsTitle: '週期規律',
+          patternsDesc: '平日節奏與符合 4 週驗證門檻的歷史訊號。',
+          forecastTitle: '未來七日預測',
+          forecastDesc: '未來 7 天能量走勢預估與每日信心區間。',
+          methodologyTitle: '數據與信心度說明',
+          methodologyDesc: '了解能量指數、信心度評估規則與隱私邊界。',
+        },
+        subpages: {
+          trendsTitle: '能量趨勢',
+          patternsTitle: '週期規律',
+          forecastTitle: '未來七日預測',
+          methodologyTitle: '數據與信心度說明',
+        },
+        accordions: {
+          sleepVitalsNotesTitle: '測量來源與空值處理說明',
+          whyPatternTitle: '為什麼識別出此規律',
+          howForecastTitle: '預測曲線與信心度如何計算',
+          energyScaleTitle: '能量指數與 1–5 自評量表',
+          confidenceRulesTitle: '信心度與規律採信規則',
+          privacyBoundaryTitle: '隱私保護與非醫療診斷聲明',
+        },
+      },
+      care: {
+        overviewSubtitle: '依當前情境選擇關懷建議，或管理驚喜關懷。',
+        scenarios: {
+          now: '當下關懷',
+          planAhead: '提前規劃',
+          datePlanning: '約會安排',
+        },
+        surpriseCardTitle: '驚喜關懷與訂單追蹤',
+        surpriseCardDesc: '查看已準備的驚喜、到期提醒與模擬外送進度。',
+        surpriseCardBadgeDue: '{count} 則提醒到期',
+        surpriseCardBadgeActive: '{count} 項進行中',
+        surprisePageTitle: '驚喜關懷',
+        surprisePrivacyTitle: '驚喜防劇透與隱私保護說明',
+        surpriseCreateBtn: '依建議建立新驚喜',
+        detailPageTitle: '關懷建議詳情',
+        detailOpenCta: '查看詳情與操作',
+        detailReasoningTitle: '推薦依據',
+        detailContextTitle: '時機與參考背景',
+        detailActionsTitle: '關懷操作',
+        detailMessageTitle: '自訂關懷留言',
+      },
+      notifications: {
+        overviewTitle: '訊息與紀念',
+        overviewSubtitle: '分類查看約會邀請、關懷動態、訂單更新與關懷時刻。',
+        settingsShortcut: '提醒設定',
+        categories: {
+          invitationsTitle: '待處理邀請',
+          invitationsDesc: '等待回覆、協商改期或最終確認的約會邀請。',
+          careUpdatesTitle: '關懷動態',
+          careUpdatesDesc: '伴侶狀態更新、關懷留言與非訂單類驚喜提醒。',
+          ordersTitle: '訂單更新',
+          ordersDesc: '模擬配送與禮物追蹤（自動遵循驚喜隱私隱藏規則）。',
+          momentsTitle: '關懷時刻',
+          momentsDesc: '已完成關懷的時間軸、備註與歷史紀錄。',
+        },
+        emptyCategory: '此分類暫時沒有內容。',
+        openDetailHint: '點擊查看詳情',
+        detailTitle: '訊息詳情',
+        invitationsEmptyNote: '目前沒有待處理的約會邀請。',
+        normalInvitationsNote: '在伴侶連線或雙機展示模式下可收發約會邀請。',
+        normalMomentsNote: '伴侶互動完成後，對應的關懷時刻將記錄於此。',
+        proposeAltTimeBtn: '建議其他時間',
+        proposeAltTimeTitle: '提議改期時間',
+        altTimeSlotLabel: '選擇預設時段或自訂時間',
+        altTimeCustomPlaceholder: '例如：週五晚間 7:30 晚餐後',
+        altTimeNotePlaceholder: '補充說明（例如：當晚節奏更輕鬆）',
+        altTimeSubmitBtn: '傳送改期建議',
+        altTimeProposedBadge: '已提議新時間',
+        altTimePresets: {
+          tonight8: '今晚 · 8:00 PM',
+          tomorrow7: '明晚 · 7:00 PM',
+          weekendAfternoon: '週六 · 下午 3:00',
+          sundayMorning: '週日 · 上午 10:30',
+        },
+        membershipSection: {
+          title: '會員與權益',
+          pageTitle: '會員與權益',
+          openCta: '查看方案與權益',
+          backToNotifications: '返回訊息中心',
+        },
+        personalSettingsSection: {
+          title: '個人設定',
+          pageTitle: '個人設定',
+          subtitle: '個人資料與頭像、伴侶關係、提醒偏好、隱私授權與其他設定',
+          openCta: '開啟個人設定',
+          pairedBadge: '已連線',
+          unpairedBadge: '未配對',
+        },
+      },
+      profile: {
+        pageTitle: '個人資料與設定',
+        membershipPageTitle: '伴侶會員方案',
+      },
     },
   },
 };

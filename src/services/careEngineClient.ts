@@ -84,6 +84,20 @@ export async function requestAiCareRecommendations(
         ? diversifyRecommendations(validation.data.recommendations, recentHistory, 3)
         : validation.data.recommendations;
 
+    const allowPlanAhead = Boolean(
+      context.recipient.energyShared &&
+        !context.recipient.insufficientHistoricalData &&
+        context.recipient.canShowFutureForecast !== false
+    );
+    const avoidPaid = Boolean(
+      context.learnedProfile?.negativelyRatedAttributes.avoidPaidSuggestions
+    );
+    const safePlanAhead = allowPlanAhead
+      ? (validation.data.planAheadRecommendations ?? [])
+          .filter((item) => !(avoidPaid && item.requiresSpendingMoney))
+          .slice(0, 3)
+      : [];
+
     return {
       source: 'gemini',
       model: jsonBody.model,
@@ -91,6 +105,9 @@ export async function requestAiCareRecommendations(
       data: {
         ...validation.data,
         recommendations: diversified,
+        ...(validation.data.planAheadRecommendations !== undefined || allowPlanAhead
+          ? { planAheadRecommendations: safePlanAhead }
+          : {}),
       },
     };
   } catch (err) {

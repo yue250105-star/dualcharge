@@ -86,6 +86,7 @@ import {
   CareActivityItem,
   CareMomentRecord,
   CareNotification,
+  CareScenarioView,
   CareSuggestion,
   CheckInOption,
   CoupleBillingPlan,
@@ -94,7 +95,9 @@ import {
   DatePlanInteraction,
   DatePlanInviteStatus,
   HealthSyncState,
+  InsightsSubView,
   LanguageCode,
+  NotificationsCategoryView,
   NormalBaselineAnalysis,
   NormalCareActivityItem,
   NormalCareNotification,
@@ -761,6 +764,14 @@ type PresentationAction =
       status: DatePlanInviteStatus;
       timeLabel: string;
     }
+  | {
+      type: 'PROPOSE_DATE_PLAN_ALTERNATIVE_TIME';
+      proposer: PartnerId;
+      planId: string;
+      slotLabel: string;
+      note?: string;
+      timeLabel: string;
+    }
   | { type: 'TRACK_SKIPPED_SUGGESTION'; partner: PartnerId; suggestionId: string }
   | { type: 'UPGRADE_COUPLE_PREMIUM'; partner: PartnerId; plan: CoupleBillingPlan; dateISO: string }
   | { type: 'SET_WIDGET_PREVIEW_STYLE'; partner: PartnerId; style: WidgetPreviewStyle }
@@ -1192,6 +1203,7 @@ function presentationReducer(
             invitedBy: action.sender,
             invitee,
             status: 'invited',
+            alternativeTimeProposal: undefined,
             updatedAtISO: new Date().toISOString(),
             updatedTimeLabel: action.timeLabel,
           },
@@ -1227,6 +1239,42 @@ function presentationReducer(
           },
         },
         careActivity: newAct ? [newAct, ...state.careActivity].slice(0, 8) : state.careActivity,
+      };
+    }
+
+    case 'PROPOSE_DATE_PLAN_ALTERNATIVE_TIME': {
+      const prev = state.datePlanInteractions[action.planId];
+      if (!prev) return state;
+      const invitee: PartnerId = action.proposer === 'alex' ? 'jamie' : 'alex';
+      const newAct: CareActivityItem = {
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'date_invite',
+        actor: action.proposer,
+        target: invitee,
+        suggestionId: action.planId,
+        timeLabel: action.timeLabel,
+        dayKind: 'today',
+      };
+      return {
+        ...state,
+        datePlanInteractions: {
+          ...state.datePlanInteractions,
+          [action.planId]: {
+            ...prev,
+            invitedBy: action.proposer,
+            invitee,
+            status: 'invited',
+            alternativeTimeProposal: {
+              proposedBy: action.proposer,
+              slotLabel: action.slotLabel,
+              note: action.note?.trim() || undefined,
+              updatedAtTime: action.timeLabel,
+            },
+            updatedAtISO: new Date().toISOString(),
+            updatedTimeLabel: action.timeLabel,
+          },
+        },
+        careActivity: [newAct, ...state.careActivity].slice(0, 8),
       };
     }
 
@@ -2264,9 +2312,20 @@ interface DualChargeContextValue {
   normalBaseline: NormalBaselineAnalysis;
   normalActivePage: AppPage;
   setNormalActivePage: (page: AppPage) => void;
+  normalLastMainPage: Exclude<AppPage, 'profile'>;
+  normalInsightsSubView: InsightsSubView;
+  setNormalInsightsSubView: (view: InsightsSubView) => void;
+  openNormalInsightsSubView: (view: InsightsSubView) => void;
+  normalCareSubView: CareScenarioView;
+  setNormalCareSubView: (view: CareScenarioView) => void;
+  openNormalCareSubView: (view: CareScenarioView) => void;
+  normalNotificationsSubView: NotificationsCategoryView;
+  setNormalNotificationsSubView: (view: NotificationsCategoryView) => void;
+  openNormalNotificationsSubView: (view: NotificationsCategoryView) => void;
   normalProfileSubView: 'main' | 'premium';
   setNormalProfileSubView: (view: 'main' | 'premium') => void;
   openNormalPremiumMembership: () => void;
+  returnFromNormalProfile: () => void;
   normalAiCareUsageCount: number;
   incrementNormalAiCareUsage: () => void;
   completeOnboarding: (draft: OnboardingDraft) => void;
@@ -2371,9 +2430,21 @@ interface DualChargeContextValue {
   presentationLoading: boolean;
   activePages: Record<PartnerId, AppPage>;
   setActivePage: (partner: PartnerId, page: AppPage) => void;
+  lastMainPages: Record<PartnerId, Exclude<AppPage, 'profile'>>;
+  insightsSubViews: Record<PartnerId, InsightsSubView>;
+  setInsightsSubView: (partner: PartnerId, view: InsightsSubView) => void;
+  openInsightsSubView: (partner: PartnerId, view: InsightsSubView) => void;
+  careSubViews: Record<PartnerId, CareScenarioView>;
+  setCareSubView: (partner: PartnerId, view: CareScenarioView) => void;
+  openCareSubView: (partner: PartnerId, view: CareScenarioView) => void;
+  notificationsSubViews: Record<PartnerId, NotificationsCategoryView>;
+  setNotificationsSubView: (partner: PartnerId, view: NotificationsCategoryView) => void;
+  openNotificationsSubView: (partner: PartnerId, view: NotificationsCategoryView) => void;
   profileSubViews: Record<PartnerId, 'main' | 'premium'>;
   setProfileSubView: (partner: PartnerId, view: 'main' | 'premium') => void;
   openPremiumMembership: (partner: PartnerId) => void;
+  returnFromProfile: (partner: PartnerId) => void;
+  shouldHideBottomNav: (scope: 'demo' | 'normal', partner: PartnerId) => boolean;
   presentationAiCareUsageCount: number;
   incrementPresentationAiCareUsage: () => void;
   dailyCheckIns: Record<PartnerId, DailyCheckInState>;
@@ -2405,6 +2476,12 @@ interface DualChargeContextValue {
   toggleDatePlanReaction: (partner: PartnerId, planId: string, reaction: 'like' | 'skip') => void;
   sendDatePlanInvite: (sender: PartnerId, planId: string) => void;
   respondDatePlanInvite: (responder: PartnerId, planId: string, status: DatePlanInviteStatus) => void;
+  proposeDatePlanAlternativeTime: (
+    proposer: PartnerId,
+    planId: string,
+    slotLabel: string,
+    note?: string
+  ) => void;
   skippedSuggestionIds: Record<PartnerId, string[]>;
   trackSkippedSuggestion: (partner: PartnerId, suggestionId: string) => void;
   membership: CoupleMembershipState;
@@ -2582,8 +2659,42 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
   const [normalInteractions, setNormalInteractions] = useState<NormalInteractionsState>(() =>
     loadPersistedNormalInteractions()
   );
-  const [normalActivePage, setNormalActivePage] = useState<AppPage>('home');
+  const [normalActivePage, setNormalActivePageState] = useState<AppPage>('home');
+  const [normalLastMainPage, setNormalLastMainPage] =
+    useState<Exclude<AppPage, 'profile'>>('home');
+  const [normalInsightsSubView, setNormalInsightsSubView] =
+    useState<InsightsSubView>('overview');
+  const [normalCareSubView, setNormalCareSubView] = useState<CareScenarioView>('now');
+  const [normalNotificationsSubView, setNormalNotificationsSubView] =
+    useState<NotificationsCategoryView>('overview');
   const [normalProfileSubView, setNormalProfileSubView] = useState<'main' | 'premium'>('main');
+
+  const setNormalActivePage = (page: AppPage) => {
+    if (page !== 'profile') {
+      setNormalLastMainPage(page);
+    }
+    setNormalActivePageState(page);
+  };
+
+  const openNormalInsightsSubView = (view: InsightsSubView) => {
+    setNormalInsightsSubView(view);
+    setNormalActivePage('insights');
+  };
+
+  const openNormalCareSubView = (view: CareScenarioView) => {
+    setNormalCareSubView(view);
+    setNormalActivePage('care');
+  };
+
+  const openNormalNotificationsSubView = (view: NotificationsCategoryView) => {
+    setNormalNotificationsSubView(view);
+    setNormalActivePage('notifications');
+  };
+
+  const returnFromNormalProfile = () => {
+    setNormalProfileSubView('main');
+    setNormalActivePageState(normalLastMainPage);
+  };
 
   // Application Mode
   const [entryMode, setEntryMode] = useState<AppEntryMode>(() =>
@@ -2603,6 +2714,26 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
   const [activePages, setActivePages] = useState<Record<PartnerId, AppPage>>({
     alex: 'home',
     jamie: 'home',
+  });
+  const [lastMainPages, setLastMainPages] = useState<
+    Record<PartnerId, Exclude<AppPage, 'profile'>>
+  >({
+    alex: 'home',
+    jamie: 'home',
+  });
+  const [insightsSubViews, setInsightsSubViews] = useState<Record<PartnerId, InsightsSubView>>({
+    alex: 'overview',
+    jamie: 'overview',
+  });
+  const [careSubViews, setCareSubViews] = useState<Record<PartnerId, CareScenarioView>>({
+    alex: 'now',
+    jamie: 'now',
+  });
+  const [notificationsSubViews, setNotificationsSubViews] = useState<
+    Record<PartnerId, NotificationsCategoryView>
+  >({
+    alex: 'overview',
+    jamie: 'overview',
   });
   const [profileSubViews, setProfileSubViews] = useState<Record<PartnerId, 'main' | 'premium'>>({
     alex: 'main',
@@ -2811,6 +2942,9 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
     setNormalPreferences(cleanPreferences);
     setNormalInteractions(createInitialNormalInteractionsState());
     setNormalActivePage('home');
+    setNormalInsightsSubView('overview');
+    setNormalCareSubView('now');
+    setNormalNotificationsSubView('overview');
     setNormalProfileSubView('main');
     setEntryMode('normal');
   };
@@ -2825,7 +2959,11 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
     setNormalPairing(createInitialNormalPairingState());
     setNormalPreferences(createInitialNormalPreferencesState());
     setNormalInteractions(createInitialNormalInteractionsState());
+    setNormalLastMainPage('home');
     setNormalActivePage('home');
+    setNormalInsightsSubView('overview');
+    setNormalCareSubView('now');
+    setNormalNotificationsSubView('overview');
     setNormalProfileSubView('main');
     setEntryMode('welcome');
   };
@@ -3328,8 +3466,8 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
   };
 
   const openNormalPremiumMembership = () => {
-    setNormalProfileSubView('premium');
-    setNormalActivePage('profile');
+    setNormalNotificationsSubView('membership');
+    setNormalActivePage('notifications');
   };
 
   const currentMonthKey = getCurrentMonthKey();
@@ -3737,7 +3875,37 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
 
   // Presentation Demo Mode actions (strictly scoped to presentationState)
   const setActivePage = (partner: PartnerId, page: AppPage) => {
+    if (page !== 'profile') {
+      setLastMainPages((prev) => ({ ...prev, [partner]: page }));
+    }
     setActivePages((prev) => ({ ...prev, [partner]: page }));
+  };
+
+  const setInsightsSubView = (partner: PartnerId, view: InsightsSubView) => {
+    setInsightsSubViews((prev) => ({ ...prev, [partner]: view }));
+  };
+
+  const openInsightsSubView = (partner: PartnerId, view: InsightsSubView) => {
+    setInsightsSubViews((prev) => ({ ...prev, [partner]: view }));
+    setActivePage(partner, 'insights');
+  };
+
+  const setCareSubView = (partner: PartnerId, view: CareScenarioView) => {
+    setCareSubViews((prev) => ({ ...prev, [partner]: view }));
+  };
+
+  const openCareSubView = (partner: PartnerId, view: CareScenarioView) => {
+    setCareSubViews((prev) => ({ ...prev, [partner]: view }));
+    setActivePage(partner, 'care');
+  };
+
+  const setNotificationsSubView = (partner: PartnerId, view: NotificationsCategoryView) => {
+    setNotificationsSubViews((prev) => ({ ...prev, [partner]: view }));
+  };
+
+  const openNotificationsSubView = (partner: PartnerId, view: NotificationsCategoryView) => {
+    setNotificationsSubViews((prev) => ({ ...prev, [partner]: view }));
+    setActivePage(partner, 'notifications');
   };
 
   const setProfileSubView = (partner: PartnerId, view: 'main' | 'premium') => {
@@ -3745,8 +3913,41 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
   };
 
   const openPremiumMembership = (partner: PartnerId) => {
-    setProfileSubViews((prev) => ({ ...prev, [partner]: 'premium' }));
-    setActivePages((prev) => ({ ...prev, [partner]: 'profile' }));
+    setNotificationsSubViews((prev) => ({ ...prev, [partner]: 'membership' }));
+    setActivePage(partner, 'notifications');
+  };
+
+  const returnFromProfile = (partner: PartnerId) => {
+    setProfileSubViews((prev) => ({ ...prev, [partner]: 'main' }));
+    setActivePages((prev) => ({ ...prev, [partner]: lastMainPages[partner] }));
+  };
+
+  const shouldHideBottomNav = (scope: 'demo' | 'normal', partner: PartnerId): boolean => {
+    if (scope === 'normal') {
+      if (normalActivePage === 'profile') return true;
+      if (normalActivePage === 'insights' && normalInsightsSubView !== 'overview') return true;
+      if (
+        normalActivePage === 'care' &&
+        (normalCareSubView === 'detail' || normalCareSubView === 'surprise')
+      ) {
+        return true;
+      }
+      if (normalActivePage === 'notifications' && normalNotificationsSubView !== 'overview') {
+        return true;
+      }
+      return false;
+    }
+    const page = activePages[partner];
+    if (page === 'profile') return true;
+    if (page === 'insights' && insightsSubViews[partner] !== 'overview') return true;
+    if (
+      page === 'care' &&
+      (careSubViews[partner] === 'detail' || careSubViews[partner] === 'surprise')
+    ) {
+      return true;
+    }
+    if (page === 'notifications' && notificationsSubViews[partner] !== 'overview') return true;
+    return false;
   };
 
   const presentationAiCareUsageCount =
@@ -3907,6 +4108,22 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
       responder,
       planId,
       status,
+      timeLabel: formatNowTime(),
+    });
+  };
+
+  const proposeDatePlanAlternativeTime = (
+    proposer: PartnerId,
+    planId: string,
+    slotLabel: string,
+    note?: string
+  ) => {
+    dispatchPresentation({
+      type: 'PROPOSE_DATE_PLAN_ALTERNATIVE_TIME',
+      proposer,
+      planId,
+      slotLabel,
+      note,
       timeLabel: formatNowTime(),
     });
   };
@@ -4121,6 +4338,7 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
         checkInStatus: sharing.energy && snapshot ? snapshot.checkInStatus : undefined,
       },
     }));
+    setCareSubViews((prev) => ({ ...prev, [partner]: 'now' }));
     setActivePage(partner, 'care');
   };
 
@@ -4369,6 +4587,10 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
   const resetDemo = () => {
     dispatchPresentation({ type: 'RESET_DEMO' });
     setActivePages({ alex: 'home', jamie: 'home' });
+    setLastMainPages({ alex: 'home', jamie: 'home' });
+    setInsightsSubViews({ alex: 'overview', jamie: 'overview' });
+    setCareSubViews({ alex: 'now', jamie: 'now' });
+    setNotificationsSubViews({ alex: 'overview', jamie: 'overview' });
     setProfileSubViews({ alex: 'main', jamie: 'main' });
     setCareStatusResponseFocus({ alex: { active: false }, jamie: { active: false } });
   };
@@ -4402,9 +4624,20 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
         normalBaseline,
         normalActivePage,
         setNormalActivePage,
+        normalLastMainPage,
+        normalInsightsSubView,
+        setNormalInsightsSubView,
+        openNormalInsightsSubView,
+        normalCareSubView,
+        setNormalCareSubView,
+        openNormalCareSubView,
+        normalNotificationsSubView,
+        setNormalNotificationsSubView,
+        openNormalNotificationsSubView,
         normalProfileSubView,
         setNormalProfileSubView,
         openNormalPremiumMembership,
+        returnFromNormalProfile,
         normalAiCareUsageCount,
         incrementNormalAiCareUsage,
         completeOnboarding,
@@ -4448,9 +4681,21 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
         presentationLoading,
         activePages,
         setActivePage,
+        lastMainPages,
+        insightsSubViews,
+        setInsightsSubView,
+        openInsightsSubView,
+        careSubViews,
+        setCareSubView,
+        openCareSubView,
+        notificationsSubViews,
+        setNotificationsSubView,
+        openNotificationsSubView,
         profileSubViews,
         setProfileSubView,
         openPremiumMembership,
+        returnFromProfile,
+        shouldHideBottomNav,
         presentationAiCareUsageCount,
         incrementPresentationAiCareUsage,
         dailyCheckIns: presentationState.dailyCheckIns,
@@ -4474,6 +4719,7 @@ export function DualChargeProvider({ children }: { children: React.ReactNode }) 
         toggleDatePlanReaction,
         sendDatePlanInvite,
         respondDatePlanInvite,
+        proposeDatePlanAlternativeTime,
         skippedSuggestionIds: presentationState.skippedSuggestionIds,
         trackSkippedSuggestion,
         membership: presentationState.membership,
